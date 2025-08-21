@@ -196,7 +196,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
         <CoinImage coin={coin} size="md" />
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2">
-            <h3 className="font-semibold text-lg">{coin.name}</h3>
+            <h3 className="text-lg" style={{ fontFamily: 'fantasy' }}>{coin.name}</h3>
             <span className="text-sm text-slate-400">({coin.symbol})</span>
           </div>
           <p className="text-sm text-slate-300 mb-3 leading-relaxed">{coin.description}</p>

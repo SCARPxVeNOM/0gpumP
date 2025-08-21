@@ -106,8 +106,8 @@ export default function CoinDetailModal({ isOpen, onClose, coin }: CoinDetailMod
                   <div className="flex items-center gap-4">
                     <CoinImage coin={coin} size="lg" />
                     <div>
-                      <CardTitle className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                        {coin.name}
+                      <CardTitle className="text-3xl bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+                        <span style={{ fontFamily: 'fantasy' }}>{coin.name}</span>
                       </CardTitle>
                       <div className="flex items-center gap-2 mt-2">
                         <Badge className="bg-gradient-to-r from-purple-500 to-blue-500 text-white text-lg px-4 py-2 rounded-xl">

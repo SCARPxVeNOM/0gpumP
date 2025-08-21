@@ -9,7 +9,7 @@ export function DialogTrigger({ asChild, children }: { asChild?: boolean; childr
 }
 
 export function DialogContent({ className = '', children }: { className?: string; children: React.ReactNode }) {
-  return <div className={`p-4 rounded-md ${className}`}>{children}</div>
+  return <div className={`p-5 nb-border nb-shadow rounded-lg bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] ${className}`}>{children}</div>
 }
 
 export function DialogHeader({ children }: { children: React.ReactNode }) {
@@ -17,7 +17,7 @@ export function DialogHeader({ children }: { children: React.ReactNode }) {
 }
 
 export function DialogTitle({ className = '', children }: { className?: string; children: React.ReactNode }) {
-  return <div className={`text-lg font-semibold ${className}`}>{children}</div>
+  return <div className={`text-xl font-extrabold ${className}`}>{children}</div>
 }
 
 

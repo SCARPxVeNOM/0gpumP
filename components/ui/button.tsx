@@ -1,17 +1,23 @@
 import * as React from 'react'
 
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: 'default' | 'secondary'
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'secondary' | 'danger'
   size?: 'sm' | 'md' | 'lg'
 }
 
-export function Button({ className = '', variant = 'default', size = 'md', ...props }: ButtonProps) {
-  const variantClass = variant === 'secondary' ? 'bg-white/10 hover:bg-white/20' : 'bg-indigo-600 hover:bg-indigo-500'
-  const sizeClass = size === 'sm' ? 'px-2 py-1 text-xs' : size === 'lg' ? 'px-4 py-3 text-base' : 'px-3 py-2 text-sm'
-  
+export function Button({ className = '', variant = 'primary', size = 'md', ...props }: ButtonProps) {
+  const bg =
+    variant === 'secondary'
+      ? 'bg-white text-black'
+      : variant === 'danger'
+      ? 'bg-red-400 text-black'
+      : 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
+
+  const padding = size === 'sm' ? 'px-3 py-2' : size === 'lg' ? 'px-6 py-3' : 'px-4 py-2.5'
+
   return (
     <button
-      className={`${sizeClass} font-medium rounded-md transition ${variantClass} ${className}`}
+      className={`inline-flex items-center justify-center ${padding} nb-border nb-shadow-sm rounded-md font-bold tracking-tight transition-transform active:translate-x-0 active:translate-y-0 hover:-translate-x-0.5 hover:-translate-y-0.5 ${bg} ${className}`}
       {...props}
     />
   )

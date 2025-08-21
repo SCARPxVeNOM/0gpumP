@@ -56,6 +56,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false) // Start with false since we don't have initial data
   const [mounted, setMounted] = useState(false)
   const [selectedCoin, setSelectedCoin] = useState<CoinData | null>(null)
+  const [logoFailed, setLogoFailed] = useState(false)
   const [isCoinDetailOpen, setIsCoinDetailOpen] = useState(false)
 
   useEffect(() => {
@@ -270,43 +271,51 @@ export default function App() {
       <div className="w-64 bg-slate-800/40 backdrop-blur-xl border-r border-slate-700/50 p-6 flex flex-col">
         {/* Logo */}
         <div className="flex items-center gap-3 mb-8">
-          <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center transform rotate-45 shadow-lg shadow-purple-500/25">
-            <div className="w-4 h-4 bg-white rounded-lg transform -rotate-45"></div>
-          </div>
-          <span className="text-xl font-bold text-white">pump.fun</span>
+          {logoFailed ? (
+            <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl nb-border nb-shadow-sm" />
+          ) : (
+            // Provide your image at /og-logo.png or via NEXT_PUBLIC_LOGO_URL (e.g., /download/<rootHash>)
+            <img
+              src={(process.env.NEXT_PUBLIC_LOGO_URL as string) || '/og-logo.jpg'}
+              alt="App logo"
+              className="w-14 h-14 rounded-2xl nb-border nb-shadow-sm object-cover"
+              onError={() => setLogoFailed(true)}
+            />
+          )}
+          <span className="text-4xl   text-white" style={{ fontFamily: 'fantasy' }}>0G Pump</span>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-2">
-          <a href="#" className="flex items-center gap-3 px-3 py-3 rounded-2xl bg-slate-700/60 backdrop-blur-sm text-white border border-slate-600/30">
+        <nav className="flex-1 space-y-3">
+          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <Home className="w-5 h-5" />
             <span>Home</span>
           </a>
-          <Link href="/bonding-curve" className="flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-700/40 transition-all duration-300 text-slate-300 border border-transparent hover:border-slate-600/30">
+          <Link href="/bonding-curve" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <TrendingDown className="w-5 h-5" />
             <span>Bonding Curve</span>
           </Link>
-          <a href="#" className="flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-700/40 transition-all duration-300 text-slate-300 border border-transparent hover:border-slate-600/30">
+          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <Video className="w-5 h-5" />
             <span>Livestreams</span>
           </a>
-          <a href="#" className="flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-700/40 transition-all duration-300 text-slate-300 border border-transparent hover:border-slate-600/30">
+          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <Zap className="w-5 h-5" />
             <span>Advanced</span>
           </a>
-          <a href="#" className="flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-700/40 transition-all duration-300 text-slate-300 border border-transparent hover:border-slate-600/30">
+          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <MessageCircle className="w-5 h-5" />
             <span>Chat</span>
           </a>
-          <a href="#" className="flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-700/40 transition-all duration-300 text-slate-300 border border-transparent hover:border-slate-600/30">
+          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <User className="w-5 h-5" />
             <span>Profile</span>
           </a>
-          <a href="#" className="flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-700/40 transition-all duration-300 text-slate-300 border border-transparent hover:border-slate-600/30">
+          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <HelpCircle className="w-5 h-5" />
             <span>Support</span>
           </a>
-          <a href="#" className="flex items-center gap-3 px-3 py-3 rounded-2xl hover:bg-slate-700/40 transition-all duration-300 text-slate-300 border border-transparent hover:border-slate-600/30">
+          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <MoreHorizontal className="w-5 h-5" />
             <span>More</span>
           </a>
@@ -357,17 +366,17 @@ export default function App() {
         <div className="bg-slate-800/40 backdrop-blur-xl border-b border-slate-700/50 p-6">
           <div className="flex items-center justify-between">
             {/* Alert Banner */}
-            <div className="bg-yellow-500/20 backdrop-blur-sm border border-yellow-500/30 rounded-2xl px-4 py-3">
-              <span className="text-sm text-yellow-300">Live bought 1.4703 SOL of rings ~ 1 min(s): $25.7K</span>
+            <div className="px-4 py-2 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--primary))]">
+              <span className="text-sm text-black font-bold">(DEMO-ALERT)Live bought 1.4703 0G of DINO ~ 1 min(s): $25.7K</span>
             </div>
 
             {/* Search and Actions */}
             <div className="flex items-center gap-4">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-600" />
                 <Input 
                   placeholder="Search coins by name, symbol, or description..." 
-                  className="pl-12 bg-slate-700/60 backdrop-blur-sm border-slate-600/30 rounded-2xl w-64 focus:ring-2 focus:ring-purple-500/50 transition-all duration-300"
+                  className="pl-12 rounded-md w-64"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -377,10 +386,7 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <Button 
-                onClick={() => setSearchQuery('')}
-                className="bg-slate-700/60 backdrop-blur-sm hover:bg-slate-600/60 text-white font-semibold rounded-2xl px-6 py-3 border border-slate-600/30 transition-all duration-300"
-              >
+              <Button onClick={() => setSearchQuery('')}>
                 {searchQuery ? 'Clear Search' : 'Search'}
               </Button>
               {mounted && <ConnectButton />}
@@ -392,15 +398,15 @@ export default function App() {
         <div className="flex-1 p-6 overflow-y-auto">
           {/* Status Banner */}
           {mounted && (
-            <div className="mb-4 p-3 bg-blue-500/20 border border-blue-500/30 rounded-2xl">
+            <div className="mb-4 px-4 py-3 bg-[hsl(var(--card))] nb-border nb-shadow-sm rounded-md">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                  <span className="text-sm text-blue-300">
+                  <span className="text-sm text-black text-bold font-bold">
                     {searchQuery ? `Search results for "${searchQuery}"` : 'Real Trading Platform • 0G Chain Integration'}
                   </span>
                 </div>
-                <span className="text-xs text-blue-400">
+                <span className="text-xs px-2 py-1 rounded nb-border nb-shadow-sm bg-white text-black">
                   {searchQuery ? `${trendingCoins.length} search result${trendingCoins.length !== 1 ? 's' : ''}` : `${allCoins.length} real tokens`}
                 </span>
               </div>
@@ -411,7 +417,7 @@ export default function App() {
           {mounted && isConnected && (
             <div className="mb-8">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                <h2 className="text-3xl  bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent" style={{ fontFamily: 'fantasy' }}>
                   Your Trading Dashboard
                 </h2>
                 <Badge className="bg-green-500/20 text-green-300 border-green-500/30">
@@ -572,38 +578,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Trading History Section */}
-          {mounted && isConnected && (
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-slate-200">Trading Activity</h3>
-                <Button
-                  variant="secondary"
-                  className="bg-slate-700/60 hover:bg-slate-600/60 border-slate-600/50 text-xs"
-                >
-                  View All
-                </Button>
-              </div>
-              
-              <div className="bg-slate-800/40 backdrop-blur-xl rounded-2xl p-6 border border-slate-700/50">
-                <div className="text-center py-8">
-                  <div className="w-16 h-16 bg-slate-700/60 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <TrendingUp className="w-8 h-8 text-slate-400" />
-                  </div>
-                  <h4 className="text-lg font-semibold text-slate-300 mb-2">No Trading Activity Yet</h4>
-                  <p className="text-slate-400 mb-4">
-                    Start trading tokens to see your real activity here. All trades will be recorded on the blockchain.
-                  </p>
-                  <Button
-                    onClick={() => setIsTokenModalOpen(true)}
-                    className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white"
-                  >
-                    Create Your First Token
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Trading History Section removed as requested */}
         </div>
       </div>
 

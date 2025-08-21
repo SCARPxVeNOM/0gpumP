@@ -205,7 +205,7 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
       <div className="flex items-center space-x-3 mb-4">
         <CoinImage coin={coin} size={48} />
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-white">{coin.name}</h3>
+          <h3 className="text-lg text-white" style={{ fontFamily: 'fantasy' }}>{coin.name}</h3>
           <p className="text-slate-400 text-sm">{coin.symbol}</p>
         </div>
         <div className="text-right">

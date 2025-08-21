@@ -3,23 +3,23 @@ import * as React from 'react'
 type Props = React.HTMLAttributes<HTMLDivElement>
 
 export function Card({ className = '', ...props }: Props) {
-  return <div className={`bg-white/5 border border-white/10 ${className}`} {...props} />
+  return <div className={`bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] nb-border nb-shadow rounded-lg ${className}`} {...props} />
 }
 
 export function CardHeader({ className = '', ...props }: Props) {
-  return <div className={`px-4 py-3 ${className}`} {...props} />
+  return <div className={`px-5 py-4 border-b-2 border-black ${className}`} {...props} />
 }
 
 export function CardTitle({ className = '', ...props }: Props) {
-  return <div className={`text-lg font-semibold ${className}`} {...props} />
+  return <div className={`text-xl font-extrabold ${className}`} {...props} />
 }
 
 export function CardDescription({ className = '', ...props }: Props) {
-  return <div className={`text-sm text-muted-foreground ${className}`} {...props} />
+  return <div className={`text-sm opacity-80 ${className}`} {...props} />
 }
 
 export function CardContent({ className = '', ...props }: Props) {
-  return <div className={`px-4 pb-4 ${className}`} {...props} />
+  return <div className={`px-5 pb-5 ${className}`} {...props} />
 }
 
 
