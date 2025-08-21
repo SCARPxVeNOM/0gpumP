@@ -1,1 +1,44 @@
-node_modules
+﻿# Node/Next/Hardhat
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.cache/
+.cache-loader/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+artifacts/
+cache/
+build/
+typechain/
+typechain-types/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local data
+server/database.sqlite
+data/*.db
+uploads/
+0g-storage-ts-starter-kit/uploads/
+0g-storage-ts-starter-kit/downloads/
+
+# Logs
+logs/
+*.log
+
+# Misc
+*.tgz
