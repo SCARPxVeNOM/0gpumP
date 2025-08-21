@@ -1,0 +1,8 @@
+{
+  "factoryAddress": "0x10ad7199954FE3479B77c9b8aaAFa2EA44275fd6",
+  "routerAddress": "0x631b62C792121cE905e73195b6B3a09bd3557a19",
+  "wethAddress": "0x2b4EcA0CD50864faBA28d21E4fEB9A73B0db9BDB",
+  "network": "0g-testnet",
+  "deployerAddress": "0x2dC274ABC0df37647CEd9212e751524708a68996",
+  "deploymentTime": "2025-08-21T07:19:32.684Z"
+}
