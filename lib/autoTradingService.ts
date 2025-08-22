@@ -222,6 +222,9 @@ class AutoTradingService {
   // Get recommended liquidity amounts based on token supply
   async getRecommendedLiquidity(tokenAddress: string): Promise<{ tokenAmount: string; ethAmount: string }> {
     try {
+      if (!this.provider) {
+        throw new Error('Provider not initialized')
+      }
       const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, this.provider)
       const totalSupply = await tokenContract.totalSupply()
       const decimals = await tokenContract.decimals()

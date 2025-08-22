@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "env": {
+    "NEXT_PUBLIC_OG_CHAIN_RPC": "https://evmrpc-testnet.0g.ai",
+    "NEXT_PUBLIC_OG_STORAGE_ENDPOINT": "https://storage.0g.ai",
+    "NEXT_PUBLIC_OG_COMPUTE_ENDPOINT": "https://compute.0g.ai"
+  }
+}
