@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "vercel-build": "next build",
+    "build:all": "npm run build",
     "lint": "next lint",
     "dev:full": "concurrently \"npm run dev\" \"npm run dev:backend\"",
     "dev:backend": "node server.js",

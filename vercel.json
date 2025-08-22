@@ -1,5 +1,14 @@
 {
   "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next",
+      "config": {
+        "installCommand": "npm install --legacy-peer-deps"
+      }
+    }
+  ],
   "env": {
     "NEXT_PUBLIC_OG_CHAIN_RPC": "https://evmrpc-testnet.0g.ai",
     "NEXT_PUBLIC_OG_STORAGE_ENDPOINT": "https://storage.0g.ai",
