@@ -352,8 +352,8 @@ export default function App() {
               setTrendingCoins([]);
               setAllCoins([]);
             }}
-            variant="secondary"
-            className="w-full mt-3 bg-red-500/20 hover:bg-red-500/30 text-red-300 border-red-500/30 text-sm py-2"
+            variant="danger"
+            className="w-full mt-3 text-sm py-2"
           >
             Clear Stored Data
           </Button>
@@ -436,7 +436,8 @@ export default function App() {
                   </p>
                   <Button
                     onClick={() => setIsTokenModalOpen(true)}
-                    className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white"
+                    variant="default"
+                    size="lg"
                   >
                     Create Your First Token
                   </Button>

@@ -9,7 +9,7 @@ export function TabsList({ className = '', ...props }: React.HTMLAttributes<HTML
 }
 
 export function TabsTrigger({ className = '', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button className={`px-3 py-1 rounded-md bg-white/10 ${className}`} {...props} />
+  return <button className={`px-3 py-1 rounded-md bg-white/10 nb-press ${className}`} {...props} />
 }
 
 export function TabsContent({ className = '', ...props }: React.HTMLAttributes<HTMLDivElement>) {

@@ -39,6 +39,16 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
   const [liqEthAmount, setLiqEthAmount] = useState('')
   const [isAddingLiquidity, setIsAddingLiquidity] = useState(false)
 
+  // Neo-brutalism utility classes
+  const cardBase =
+    'bg-sky-100 text-slate-900 rounded-xl p-6 border-4 border-black cursor-pointer shadow-[6px_6px_0_#000] hover:shadow-[8px_8px_0_#000] transition-transform duration-200 hover:-translate-x-1 hover:-translate-y-1'
+  const neoInput =
+    'flex-1 bg-white text-slate-900 border-2 border-black rounded-lg focus:outline-none focus:ring-0 focus:border-black placeholder:text-slate-500'
+  const neoButton =
+    'border-2 border-black rounded-lg shadow-[4px_4px_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_#000] transition-all'
+  const neoButtonSecondary =
+    'bg-white hover:bg-slate-100 text-slate-900 '+neoButton
+
   // Load market data and check liquidity
   useEffect(() => {
     // Initialize blockchain service with user's wallet
@@ -189,28 +199,28 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       whileHover={{ scale: 1.02, y: -4 }}
       transition={{ duration: 0.3 }}
       onClick={onClick}
-      className="bg-slate-800/40 backdrop-blur-xl rounded-3xl p-6 border border-slate-700/50 cursor-pointer shadow-xl shadow-slate-900/20 hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-300"
+      className={cardBase}
     >
       {/* Header with Image and Basic Info */}
       <div className="flex items-start gap-4 mb-4">
         <CoinImage coin={coin} size="md" />
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-lg" style={{ fontFamily: 'fantasy' }}>{coin.name}</h3>
-            <span className="text-sm text-slate-400">({coin.symbol})</span>
+            <h3 className="text-2xl font-extrabold tracking-tight">{coin.name}</h3>
+            <span className="text-sm text-slate-700">({coin.symbol})</span>
           </div>
-          <p className="text-sm text-slate-300 mb-3 leading-relaxed">{coin.description}</p>
+          <p className="text-sm text-slate-800 mb-3 leading-relaxed">{coin.description}</p>
           
           {/* Real Market Data */}
           {marketData && (
-            <div className="grid grid-cols-2 gap-4 text-xs text-slate-400 mb-3">
+            <div className="grid grid-cols-2 gap-4 text-xs text-slate-700 mb-3">
               <div className="flex items-center justify-between">
                 <span>Price:</span>
-                <span className="text-slate-300">{formatPrice(marketData.currentPrice)}</span>
+                <span className="text-slate-900 font-semibold">{formatPrice(marketData.currentPrice)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Market Cap:</span>
-                <span className="text-slate-300">${marketData.marketCap.toLocaleString()}</span>
+                <span className="text-slate-900 font-semibold">${marketData.marketCap.toLocaleString()}</span>
               </div>
             </div>
           )}
@@ -218,12 +228,12 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
           {/* Liquidity Status */}
           <div className="flex items-center gap-2 mb-3">
             {hasLiquidity ? (
-              <div className="flex items-center gap-1 text-green-400 text-xs">
+              <div className="flex items-center gap-1 text-green-600 text-xs">
                 <CheckCircle className="w-3 h-3" />
                 <span>Trading Enabled</span>
               </div>
             ) : (
-              <div className="flex items-center gap-1 text-yellow-400 text-xs">
+              <div className="flex items-center gap-1 text-yellow-600 text-xs">
                 <AlertCircle className="w-3 h-3" />
                 <span>No Liquidity Pool</span>
               </div>
@@ -234,14 +244,14 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
 
       {/* User Balances */}
       {isConnected && (
-        <div className="grid grid-cols-2 gap-4 text-xs text-slate-400 mb-4 p-3 bg-slate-700/30 rounded-lg">
+        <div className="grid grid-cols-2 gap-4 text-xs text-slate-700 mb-4 p-3 bg-white border-2 border-black rounded-lg shadow-[3px_3px_0_#000]">
           <div className="flex items-center justify-between">
             <span>Your {coin.symbol}:</span>
-            <span className="text-slate-300">{formatBalance(userBalance)}</span>
+            <span className="text-slate-900 font-semibold">{formatBalance(userBalance)}</span>
           </div>
           <div className="flex items-center justify-between">
             <span>Your ETH:</span>
-            <span className="text-slate-300">{formatBalance(ethBalance)}</span>
+            <span className="text-slate-900 font-semibold">{formatBalance(ethBalance)}</span>
           </div>
         </div>
       )}
@@ -256,13 +266,13 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
               placeholder="Amount to trade"
               value={tradeAmount}
               onChange={(e) => setTradeAmount(e.target.value)}
-              className="flex-1 bg-slate-700/60 border-slate-600/50 focus:border-purple-500/50 text-white"
+              className={neoInput}
               min="0"
               step="0.000001"
             />
             <Button
               variant="secondary"
-              className="px-3 bg-slate-700/60 hover:bg-slate-600/60 border-slate-600/50"
+              size="sm"
               onClick={() => setTradeAmount(tradeAction === 'buy' ? ethBalance : userBalance)}
             >
               Max
@@ -277,7 +287,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
                 handleTrade('buy')
               }}
               disabled={isTrading || !tradeAmount || parseFloat(tradeAmount) <= 0 || !isConnected}
-              className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white font-semibold disabled:opacity-50"
+              className={"flex-1 "+neoButton+" bg-green-400 hover:bg-green-300 text-slate-900 font-bold disabled:opacity-50"}
             >
               {isTrading && tradeAction === 'buy' ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
@@ -293,7 +303,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
                 handleTrade('sell')
               }}
               disabled={isTrading || !tradeAmount || parseFloat(tradeAmount) <= 0 || !isConnected}
-              className="flex-1 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white font-semibold disabled:opacity-50"
+              className={"flex-1 "+neoButton+" bg-red-400 hover:bg-red-300 text-slate-900 font-bold disabled:opacity-50"}
             >
               {isTrading && tradeAction === 'sell' ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
@@ -306,26 +316,25 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
 
           {/* Error/Success Messages */}
           {error && (
-            <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-300 text-xs">
+            <div className="p-3 bg-red-200 border-2 border-black rounded-lg text-red-900 text-xs shadow-[3px_3px_0_#000]">
               {error}
             </div>
           )}
           
           {success && (
-            <div className="p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-300 text-xs">
+            <div className="p-3 bg-green-200 border-2 border-black rounded-lg text-green-900 text-xs shadow-[3px_3px_0_#000]">
               {success}
             </div>
           )}
         </div>
       ) : (
         <div className="text-center py-4">
-          <p className="text-slate-400 text-sm mb-3">
+          <p className="text-slate-700 text-sm mb-3">
             This token needs a liquidity pool to enable trading
           </p>
           {!showAddLiquidity ? (
             <Button
-              variant="secondary"
-              className="bg-slate-700/60 hover:bg-slate-600/60 border-slate-600/50"
+              variant="neutral"
               onClick={(e) => {
                 e.stopPropagation()
                 setShowAddLiquidity(true)
@@ -341,18 +350,19 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
                   placeholder="Token amount"
                   value={liqTokenAmount}
                   onChange={(e) => setLiqTokenAmount(e.target.value)}
+                  className={neoInput}
                 />
                 <Input
                   type="number"
                   placeholder="ETH amount"
                   value={liqEthAmount}
                   onChange={(e) => setLiqEthAmount(e.target.value)}
+                  className={neoInput}
                 />
               </div>
               <div className="flex gap-2 justify-center">
                 <Button
-                  variant="secondary"
-                  className="bg-slate-700/60 hover:bg-slate-600/60 border-slate-600/50"
+                  variant="neutral"
                   disabled={isAddingLiquidity}
                   onClick={(e) => {
                     e.stopPropagation()
@@ -363,7 +373,6 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
                 </Button>
                 <Button
                   variant="secondary"
-                  className="bg-slate-700/60 hover:bg-slate-600/60 border-slate-600/50"
                   onClick={(e) => {
                     e.stopPropagation()
                     setShowAddLiquidity(false)
@@ -381,7 +390,8 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       <div className="flex gap-2 pt-4">
         <Button
           variant="secondary"
-          className="flex-1 bg-slate-700/60 hover:bg-slate-600/60 border-slate-600/50 text-xs"
+          size="sm"
+          className="flex-1 text-xs"
           onClick={(e) => {
             e.stopPropagation()
             // TODO: Open chart view
@@ -393,7 +403,8 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
         
         <Button
           variant="secondary"
-          className="flex-1 bg-slate-700/60 hover:bg-slate-600/60 border-slate-600/50 text-xs"
+          size="sm"
+          className="flex-1 text-xs"
           onClick={(e) => {
             e.stopPropagation()
             // TODO: Add to watchlist
@@ -404,7 +415,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       </div>
 
       {/* Token Details (Real Data Only) */}
-      <div className="mt-4 pt-4 border-t border-slate-700/30 text-xs text-slate-400">
+      <div className="mt-4 pt-4 border-t-4 border-black text-xs text-slate-700">
         <div className="grid grid-cols-2 gap-2">
           <div>Contract: {coin.tokenAddress ? `${coin.tokenAddress.slice(0, 8)}...${coin.tokenAddress.slice(-6)}` : 'N/A'}</div>
           <div>Creator: {coin.creator.slice(0, 6)}...{coin.creator.slice(-4)}</div>
@@ -412,14 +423,14 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
         
         {/* Social Media Links (Real URLs) */}
         {(coin.telegramUrl || coin.xUrl || coin.discordUrl || coin.websiteUrl) && (
-          <div className="flex items-center gap-2 mt-2 text-xs text-slate-400">
+          <div className="flex items-center gap-2 mt-2 text-xs text-slate-700">
             <span>Social:</span>
             {coin.telegramUrl && (
               <a 
                 href={coin.telegramUrl} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 transition-colors"
+                className="underline decoration-black decoration-2 underline-offset-2 hover:text-blue-700"
                 onClick={(e) => e.stopPropagation()}
               >
                 📱 Telegram
@@ -430,7 +441,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
                 href={coin.xUrl} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-slate-300 hover:text-slate-200 transition-colors"
+                className="underline decoration-black decoration-2 underline-offset-2 hover:text-slate-900"
                 onClick={(e) => e.stopPropagation()}
               >
                 🐦 X/Twitter
@@ -441,7 +452,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
                 href={coin.discordUrl} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-indigo-400 hover:text-indigo-300 transition-colors"
+                className="underline decoration-black decoration-2 underline-offset-2 hover:text-indigo-800"
                 onClick={(e) => e.stopPropagation()}
               >
                 🎮 Discord
@@ -452,7 +463,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
                 href={coin.websiteUrl} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="text-green-400 hover:text-green-300 transition-colors"
+                className="underline decoration-black decoration-2 underline-offset-2 hover:text-green-800"
                 onClick={(e) => e.stopPropagation()}
               >
                 🌐 Website

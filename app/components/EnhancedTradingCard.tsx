@@ -212,7 +212,7 @@ export default function EnhancedTradingCard({
   }
 
   return (
-    <Card className="w-full max-w-md bg-white/5 border border-white/10">
+    <Card className="w-full max-w-md bg-white/5 border border-white/10 nb-press">
       <CardHeader>
         <div className="flex items-center space-x-3">
           {tokenImage && (

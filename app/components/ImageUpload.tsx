@@ -97,7 +97,7 @@ export default function ImageUpload({ onImageSelect, selectedImage, className = 
             />
           </div>
         ) : (
-          <div className="relative border border-white/20 rounded-xl p-4">
+          <div className="relative border border-white/20 rounded-xl p-4 nb-press">
             <div className="flex items-center space-x-4">
               <div className="w-16 h-16 rounded-lg overflow-hidden bg-black/20">
                 {previewUrl && (
@@ -128,6 +128,9 @@ export default function ImageUpload({ onImageSelect, selectedImage, className = 
     </div>
   )
 }
+
+
+
 
 
 

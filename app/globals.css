@@ -73,5 +73,9 @@
   .nb-shadow-lg {
     box-shadow: 8px 8px 0 0 #000;
   }
+  /* Shared press/lift behavior */
+  .nb-press {
+    @apply transition-transform hover:translate-x-1 hover:translate-y-1 hover:shadow-[2px_2px_0_#000] active:translate-x-2 active:translate-y-2 active:shadow-none;
+  }
 }
 

@@ -100,14 +100,14 @@ export default function CoinDetailModal({ isOpen, onClose, coin }: CoinDetailMod
             className="w-full max-w-4xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <Card className="bg-slate-800/90 backdrop-blur-xl border-slate-700/50 shadow-2xl">
+            <Card className="bg-slate-800/90 backdrop-blur-xl border-slate-700/50 shadow-2xl nb-press">
               <CardHeader className="relative">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <CoinImage coin={coin} size="lg" />
                     <div>
                       <CardTitle className="text-3xl bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-                        <span style={{ fontFamily: 'fantasy' }}>{coin.name}</span>
+                        <span style={{ fontFamily: 'serif' }}>{coin.name}</span>
                       </CardTitle>
                       <div className="flex items-center gap-2 mt-2">
                         <Badge className="bg-gradient-to-r from-purple-500 to-blue-500 text-white text-lg px-4 py-2 rounded-xl">

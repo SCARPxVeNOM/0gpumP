@@ -321,17 +321,16 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
             className="w-full max-w-4xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <Card className="bg-slate-800/90 backdrop-blur-xl border-slate-700/50 shadow-2xl">
+            <Card className="bg-slate-800/90 backdrop-blur-xl border-slate-700/50 shadow-2xl nb-press">
               <CardHeader className="relative">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
                     Create New Token
                   </CardTitle>
-                                                        <Button
-                     variant="secondary"
-                     onClick={onClose}
-                     className="text-slate-400 hover:text-white"
-                   >
+                                                                          <Button
+                    variant="secondary"
+                    onClick={onClose}
+                  >
                      <X className="w-5 h-5" />
                    </Button>
                 </div>
@@ -582,12 +581,11 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
                          )}
                        </Button>
 
-                                                <Button
-                           variant="secondary"
-                           onClick={onClose}
-                           disabled={isCreating}
-                           className="border-slate-600/50 text-slate-300 hover:bg-slate-700/50"
-                         >
+                                                                       <Button
+                         variant="secondary"
+                         onClick={onClose}
+                         disabled={isCreating}
+                       >
                            Cancel
                          </Button>
                      </>

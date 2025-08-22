@@ -3,7 +3,7 @@ import * as React from 'react'
 type Props = React.HTMLAttributes<HTMLDivElement>
 
 export function Card({ className = '', ...props }: Props) {
-  return <div className={`bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] nb-border nb-shadow rounded-lg ${className}`} {...props} />
+  return <div className={`bg-[hsl(var(--card))] text-[hsl(var(--card-foreground))] nb-border nb-shadow rounded-lg nb-press ${className}`} {...props} />
 }
 
 export function CardHeader({ className = '', ...props }: Props) {

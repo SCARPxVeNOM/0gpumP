@@ -196,14 +196,14 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
 
   return (
     <motion.div
-      className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4 cursor-pointer hover:bg-slate-700/50 transition-all duration-200"
+      className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4 cursor-pointer hover:bg-slate-700/50 transition-all duration-200 nb-press"
       onClick={onClick}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
     >
       {/* Header */}
       <div className="flex items-center space-x-3 mb-4">
-        <CoinImage coin={coin} size={48} />
+        <CoinImage coin={coin} size="md" />
         <div className="flex-1">
           <h3 className="text-lg text-white" style={{ fontFamily: 'fantasy' }}>{coin.name}</h3>
           <p className="text-slate-400 text-sm">{coin.symbol}</p>
@@ -289,8 +289,7 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
             This token needs a liquidity pool to enable trading
           </p>
           <Button
-            variant="secondary"
-            className="bg-slate-700/60 hover:bg-slate-600/60 border-slate-600/50"
+            variant="neutral"
             onClick={(e) => {
               e.stopPropagation()
               handleEnableTrading()
@@ -329,7 +328,8 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
       <div className="flex gap-2 pt-4">
         <Button
           variant="secondary"
-          className="flex-1 bg-slate-700/60 hover:bg-slate-600/60 border-slate-600/50 text-xs"
+          size="sm"
+          className="flex-1 text-xs"
           onClick={(e) => {
             e.stopPropagation()
             // TODO: Open chart view
@@ -341,7 +341,8 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
         
         <Button
           variant="secondary"
-          className="flex-1 bg-slate-700/60 hover:bg-slate-600/60 border-slate-600/50 text-xs"
+          size="sm"
+          className="flex-1 text-xs"
           onClick={(e) => {
             e.stopPropagation()
             // TODO: Add to watchlist
