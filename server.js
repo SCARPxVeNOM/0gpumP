@@ -177,15 +177,15 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         // STEP 2: GZIP COMPRESSION - For all files
         if (outputBuffer.length > 1024) {
           console.log(`🗜️ Applying Gzip compression...`);
-          const { gzip } = require('zlib');
-          const { promisify } = require('util');
+          const { gzip } = await import('zlib');
+          const { promisify } = await import('util');
           const gzipAsync = promisify(gzip);
           
           try {
             const gzipped = await gzipAsync(outputBuffer, { 
               level: 9,
               memLevel: 9,
-              strategy: require('zlib').constants.Z_HUFFMAN_ONLY
+              strategy: (await import('zlib')).constants.Z_HUFFMAN_ONLY
             });
             if (gzipped.length < outputBuffer.length) {
               const beforeGzip = outputBuffer.length;
@@ -878,14 +878,15 @@ async function compressFile(file) {
     // STEP 2: GZIP COMPRESSION - For all files
     if (outputBuffer.length > 1024) {
       console.log(`🗜️ Applying Gzip compression...`);
-      const { gzip } = require('zlib');
-      const { promisify } = require('util');
+      const { gzip } = await import('zlib');
+      const { promisify } = await import('util');
       const gzipAsync = promisify(gzip);
       
       try {
         const beforeGzip = outputBuffer.length;
         const gzipped = await gzipAsync(outputBuffer);
         
+        const { constants } = await import('zlib');
         if (gzipped.length < outputBuffer.length) {
           outputBuffer = gzipped;
           outName = outName + '.gz';
