@@ -1,0 +1,35 @@
+{
+  "name": "0gpump-enhanced-indexer",
+  "version": "1.0.0",
+  "description": "Enhanced indexer for 0G Pump with Postgres database and pump.fun event support",
+  "main": "enhanced-indexer.js",
+  "scripts": {
+    "start": "node enhanced-indexer.js",
+    "dev": "nodemon enhanced-indexer.js",
+    "setup-db": "psql $DATABASE_URL -f ../database/schema.sql",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "ethers": "^5.7.2",
+    "pg": "^8.11.3",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "0g",
+    "pump",
+    "indexer",
+    "postgres",
+    "ethereum",
+    "token-factory"
+  ],
+  "author": "0G Pump Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

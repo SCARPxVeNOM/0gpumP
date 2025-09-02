@@ -18,23 +18,29 @@ export default function CoinImage({ coin, size = 'md', className = '' }: CoinIma
   }
 
   const backendBase = useMemo(() => {
-    if (typeof window !== 'undefined') {
-      return `${window.location.protocol}//${window.location.hostname}:4000`
-    }
+    const envUrl = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) as string | undefined
+    if (envUrl && typeof envUrl === 'string') return envUrl
     return 'http://localhost:4000'
   }, [])
 
   useEffect(() => {
     // Preferred: explicit URL
     if (coin.imageUrl && (coin.imageUrl.startsWith('http') || coin.imageUrl.startsWith('/'))) {
-      setImageSrc(coin.imageUrl.startsWith('/') ? `${backendBase}${coin.imageUrl}` : coin.imageUrl)
+      // Route through Next proxy if it's a root-hash URL pointing to backend
+      if (coin.imageUrl.startsWith('http')) {
+        // If imageUrl already absolute, keep it; otherwise rely on proxy path below
+        setImageSrc(coin.imageUrl)
+      } else {
+        setImageSrc(coin.imageUrl.startsWith('/') ? `${backendBase}${coin.imageUrl}` : coin.imageUrl)
+      }
       return
     }
 
     // Fallback: root hash present
     const root = (coin as any).imageRootHash || (coin as any).imageHash
     if (typeof root === 'string' && root.length > 0) {
-      setImageSrc(`${backendBase}/download/${root}`)
+      // Use proxy path to avoid mixed content/CORS
+      setImageSrc(`/api/image/${root}`)
       return
     }
 

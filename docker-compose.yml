@@ -1,0 +1,27 @@
+version: '3.9'
+services:
+  storage:
+    build:
+      context: ./0g-storage-ts-starter-kit
+      dockerfile: Dockerfile
+    environment:
+      - PORT=3000
+    ports:
+      - "3000:3000"
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      - PORT=4000
+      - OG_STORAGE_API=http://storage:3000
+      - OG_RPC=https://evmrpc-testnet.0g.ai
+      - FACTORY_ADDRESS=${FACTORY_ADDRESS}
+      - ROUTER_ADDRESS=${ROUTER_ADDRESS}
+      - DEPLOYER_PRIVATE_KEY=${DEPLOYER_PRIVATE_KEY}
+      - SYNC_INTERVAL_MS=30000
+    ports:
+      - "4000:4000"
+    depends_on:
+      - storage

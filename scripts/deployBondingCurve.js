@@ -1,37 +1,37 @@
-const { ethers } = require('hardhat');
-require('dotenv').config();
+const { ethers } = require("hardhat");
 
 async function main() {
+  console.log("🚀 Deploying Bonding Curve contracts...");
+
+  // Get the deployer account
   const [deployer] = await ethers.getSigners();
-  console.log('Deploying with account:', deployer.address);
-  console.log('Account balance:', (await deployer.getBalance()).toString());
+  console.log("📝 Deploying contracts with account:", deployer.address);
 
-  // Deploy BondingCurveAMM
-  console.log('\nDeploying BondingCurveAMM...');
+  // Deploy TokenFactory first
+  console.log("🏭 Deploying TokenFactory...");
+  const TokenFactory = await ethers.getContractFactory("TokenFactory");
   
-  const BondingCurveAMM = await ethers.getContractFactory('BondingCurveAMM');
+  // Set fee recipient (can be deployer for now)
+  const feeRecipient = deployer.address;
+  const tokenFactory = await TokenFactory.deploy(feeRecipient);
+  await tokenFactory.deployed();
   
-  // Configuration parameters (adjust as needed)
-  const name = '0G Pump Token';
-  const symbol = '0GPUMP';
-  const basePrice = ethers.utils.parseEther('0.0001'); // 0.0001 0G per token
-  const stepSize = ethers.utils.parseEther('0.00005'); // 0.00005 0G increase per step
-  const stepQty = ethers.BigNumber.from('1000'); // 1000 tokens per step
-  const curveCap = ethers.BigNumber.from('100000'); // 100k total tokens on curve
-  const feeBps = 200; // 2% fee
-  const feeRecipient = process.env.FEE_RECIPIENT || deployer.address;
+  console.log("✅ TokenFactory deployed to:", tokenFactory.address);
 
-  console.log('Deployment parameters:');
-  console.log('- Name:', name);
-  console.log('- Symbol:', symbol);
-  console.log('- Base Price:', ethers.utils.formatEther(basePrice), '0G');
-  console.log('- Step Size:', ethers.utils.formatEther(stepSize), '0G');
-  console.log('- Step Quantity:', stepQty.toString());
-  console.log('- Curve Cap:', curveCap.toString());
-  console.log('- Fee (bps):', feeBps);
-  console.log('- Fee Recipient:', feeRecipient);
-
-  const bondingCurve = await BondingCurveAMM.deploy(
+  // Deploy a sample bonding curve to test
+  console.log("📈 Deploying sample BondingCurveAMM...");
+  const BondingCurveAMM = await ethers.getContractFactory("BondingCurveAMM");
+  
+  // Sample curve parameters
+  const name = "Sample Token";
+  const symbol = "SMPL";
+  const basePrice = ethers.utils.parseEther("0.001"); // 0.001 0G
+  const stepSize = ethers.utils.parseEther("0.000001"); // 0.000001 0G per step
+  const stepQty = 1000; // 1000 tokens per step
+  const curveCap = 1000000; // 1M total tokens
+  const feeBps = 500; // 5% fee
+  
+  const sampleCurve = await BondingCurveAMM.deploy(
     name,
     symbol,
     basePrice,
@@ -41,49 +41,76 @@ async function main() {
     feeBps,
     feeRecipient
   );
-
-  await bondingCurve.deployed();
-
-  console.log('\n✅ BondingCurveAMM deployed to:', bondingCurve.address);
-  console.log('Project Token address:', await bondingCurve.token());
-
-  // Deploy LiquidityMigrator
-  console.log('\nDeploying LiquidityMigrator...');
+  await sampleCurve.deployed();
   
-  const LiquidityMigrator = await ethers.getContractFactory('LiquidityMigrator');
+  console.log("✅ Sample BondingCurveAMM deployed to:", sampleCurve.address);
+  console.log("✅ Sample token deployed to:", sampleCurve.token());
+
+  // Save deployment info
+  const deploymentInfo = {
+    network: "0g-testnet",
+    deployer: deployer.address,
+    contracts: {
+      TokenFactory: {
+        address: tokenFactory.address,
+        feeRecipient: feeRecipient
+      },
+      SampleBondingCurve: {
+        address: sampleCurve.address,
+        token: sampleCurve.token(),
+        name: name,
+        symbol: symbol,
+        basePrice: ethers.utils.formatEther(basePrice),
+        stepSize: ethers.utils.formatEther(stepSize),
+        stepQty: stepQty,
+        curveCap: curveCap,
+        feeBps: feeBps
+      }
+    },
+    timestamp: new Date().toISOString()
+  };
+
+  // Write deployment info to file
+  const fs = require("fs");
+  fs.writeFileSync(
+    "bonding-curve-deployment.json",
+    JSON.stringify(deploymentInfo, null, 2)
+  );
+
+  console.log("📄 Deployment info saved to bonding-curve-deployment.json");
+
+  // Verify deployment
+  console.log("\n🔍 Verifying deployment...");
   
-  // You'll need to deploy UniswapV2 Router first and set its address
-  const routerAddress = process.env.UNISWAP_ROUTER;
-  if (!routerAddress) {
-    console.log('⚠️  UNISWAP_ROUTER not set in .env, skipping LiquidityMigrator deployment');
-    console.log('Deploy LiquidityMigrator later with:');
-    console.log(`npx hardhat run scripts/deployMigrator.js --network 0g-testnet`);
-  } else {
-    const migrator = await LiquidityMigrator.deploy(routerAddress);
-    await migrator.deployed();
+  try {
+    // Check TokenFactory
+    const factoryOwner = await tokenFactory.owner();
+    console.log("✅ TokenFactory owner:", factoryOwner);
     
-    console.log('✅ LiquidityMigrator deployed to:', migrator.address);
-    console.log('Router address:', routerAddress);
+    // Check sample curve
+    const curveOwner = await sampleCurve.owner();
+    const curveToken = await sampleCurve.token();
+    const curveBasePrice = await sampleCurve.basePrice();
+    
+    console.log("✅ Sample curve owner:", curveOwner);
+    console.log("✅ Sample curve token:", curveToken);
+    console.log("✅ Sample curve base price:", ethers.utils.formatEther(curveBasePrice), "0G");
+    
+    console.log("\n🎉 All contracts deployed successfully!");
+    console.log("\n📋 Next steps:");
+    console.log("1. Update your frontend with TokenFactory address:", tokenFactory.address);
+    console.log("2. Test token creation with createToken() function");
+    console.log("3. Test trading on the sample curve");
+    console.log("4. Deploy more curves for different tokens");
+    
+  } catch (error) {
+    console.error("❌ Verification failed:", error);
   }
-
-  // Output deployment summary
-  console.log('\n📋 Deployment Summary:');
-  console.log('========================');
-  console.log('BondingCurveAMM:', bondingCurve.address);
-  console.log('Project Token:', await bondingCurve.token());
-  if (routerAddress) {
-    console.log('LiquidityMigrator:', migrator.address);
-  }
-  console.log('\n🔗 Next steps:');
-  console.log('1. Verify contracts on 0G block explorer');
-  console.log('2. Update frontend with contract addresses');
-  console.log('3. Test bonding curve functionality');
-  console.log('4. Deploy UniswapV2 fork for graduation');
 }
 
 main()
   .then(() => process.exit(0))
   .catch((error) => {
-    console.error('❌ Deployment failed:', error);
+    console.error("❌ Deployment failed:", error);
     process.exit(1);
   });

@@ -145,6 +145,19 @@ export async function POST(request: NextRequest) {
     
     const db = await getDatabase()
     
+    // Prevent duplicate symbols (case-insensitive)
+    const existing = await db.get(
+      'SELECT 1 FROM coins WHERE lower(symbol) = lower(?) LIMIT 1',
+      coinData.symbol
+    )
+    if (existing) {
+      await db.close()
+      return NextResponse.json(
+        { success: false, error: 'Symbol already exists' },
+        { status: 409 }
+      )
+    }
+    
     // Create new coin with metadata
     const newCoin = {
       id: `${coinData.symbol.toLowerCase()}-${Date.now()}`,

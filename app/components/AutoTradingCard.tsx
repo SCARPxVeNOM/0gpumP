@@ -27,6 +27,7 @@ interface AutoTradingCardProps {
 
 export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingCardProps) {
   const { address, isConnected } = useAccount()
+  const [displayCoin, setDisplayCoin] = useState(coin)
   const [tradeAmount, setTradeAmount] = useState('')
   const [isTrading, setIsTrading] = useState(false)
   const [tradeAction, setTradeAction] = useState<'buy' | 'sell' | null>(null)
@@ -45,39 +46,65 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
       const initializeServices = async () => {
         try {
           const provider = new ethers.providers.Web3Provider((window as any).ethereum)
-          
-          // Initialize blockchain trading service
           await blockchainTradingService.initialize(provider)
-          
-          // Initialize auto trading service (you'll need to import the config)
-          // await autoTradingService.initialize(provider, AUTO_TRADING_CONFIG)
-          
-          // Initialize automated token creator
-          // await automatedTokenCreator.initialize(provider, AUTO_TRADING_CONFIG)
-          
         } catch (error) {
           console.error('Failed to initialize services:', error)
         }
       }
-      
       initializeServices()
     }
   }, [isConnected])
 
   // Load data
   useEffect(() => {
-    if (coin.tokenAddress && isConnected) {
+    if (coin.tokenAddress) {
+      // Restore cached data
+      try {
+        const mdRaw = localStorage.getItem(`md:${coin.tokenAddress}`)
+        if (mdRaw) setMarketData(JSON.parse(mdRaw))
+        if (address) {
+          const balRaw = localStorage.getItem(`bal:${coin.tokenAddress}:${address}`)
+          if (balRaw) {
+            const bal = JSON.parse(balRaw)
+            setUserBalance(bal.token || '0')
+            setEthBalance(bal.eth || '0')
+          }
+        }
+      } catch {}
       loadData()
     }
   }, [coin.tokenAddress, isConnected, address])
 
+  // Load on-chain metadata for display
+  useEffect(() => {
+    const loadChainInfo = async () => {
+      try {
+        if (!coin.tokenAddress) return
+        const info = await blockchainTradingService.getTokenInfo(coin.tokenAddress)
+        setDisplayCoin(prev => ({
+          ...prev,
+          name: info.name || prev.name,
+          symbol: info.symbol || prev.symbol,
+          description: info.description || prev.description,
+          creator: (info.creator || prev.creator || '').toString(),
+          imageHash: (info.imageRootHash as any) || (prev as any).imageHash,
+          imageRootHash: (info.imageRootHash as any) || (prev as any).imageRootHash,
+        }) as any)
+      } catch (e) {
+        console.warn('Failed to load on-chain token info:', e)
+      }
+    }
+    loadChainInfo()
+  }, [coin.tokenAddress])
+
   const loadData = async () => {
     setIsLoading(true)
     try {
-      // Load market data
+      // Load market data (read-only if not connected)
       if (coin.tokenAddress) {
         const data = await blockchainTradingService.getMarketData(coin.tokenAddress)
         setMarketData(data)
+        try { localStorage.setItem(`md:${coin.tokenAddress}`, JSON.stringify(data)) } catch {}
       }
 
       // Check trading status
@@ -92,6 +119,7 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
         const ethBalance = await blockchainTradingService.getETHBalance(address)
         setUserBalance(tokenBalance)
         setEthBalance(ethBalance)
+        try { localStorage.setItem(`bal:${coin.tokenAddress}:${address}`, JSON.stringify({ token: tokenBalance, eth: ethBalance })) } catch {}
       }
     } catch (error) {
       console.error('Failed to load data:', error)
@@ -203,10 +231,10 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
     >
       {/* Header */}
       <div className="flex items-center space-x-3 mb-4">
-        <CoinImage coin={coin} size="md" />
+        <CoinImage coin={displayCoin as any} size="md" />
         <div className="flex-1">
-          <h3 className="text-lg text-white" style={{ fontFamily: 'fantasy' }}>{coin.name}</h3>
-          <p className="text-slate-400 text-sm">{coin.symbol}</p>
+          <h3 className="text-lg text-white" style={{ fontFamily: 'fantasy' }}>{displayCoin.name}</h3>
+          <p className="text-slate-400 text-sm">{displayCoin.symbol}</p>
         </div>
         <div className="text-right">
           <p className="text-white font-medium">{formatPrice(marketData?.currentPrice || 0)}</p>
@@ -245,7 +273,7 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
               placeholder="Amount"
               value={tradeAmount}
               onChange={(e) => setTradeAmount(e.target.value)}
-              className="flex-1 bg-slate-700/50 border-slate-600/50 text-white"
+              className="flex-1 bg-slate-700/50 text-white border-4 border-black shadow-[4px_4px_0_#000] focus:outline-none focus:ring-0 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_#000]"
             />
           </div>
 
@@ -257,7 +285,7 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
                 handleTrade('buy')
               }}
               disabled={isTrading || !tradeAmount}
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+              className="flex-1 bg-green-400 text-black border-4 border-black shadow-[6px_6px_0_#000] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-[3px_3px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000]"
             >
               {isTrading && tradeAction === 'buy' ? (
                 <RefreshCw className="w-4 h-4 animate-spin mr-2" />
@@ -272,7 +300,7 @@ export default function AutoTradingCard({ coin, onTrade, onClick }: AutoTradingC
                 handleTrade('sell')
               }}
               disabled={isTrading || !tradeAmount}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              className="flex-1 bg-red-400 text-black border-4 border-black shadow-[6px_6px_0_#000] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-[3px_3px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000]"
             >
               {isTrading && tradeAction === 'sell' ? (
                 <RefreshCw className="w-4 h-4 animate-spin mr-2" />

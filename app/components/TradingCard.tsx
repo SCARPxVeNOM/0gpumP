@@ -25,6 +25,7 @@ interface TradingCardProps {
 
 export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps) {
   const { address, isConnected } = useAccount()
+  const [displayCoin, setDisplayCoin] = useState(coin)
   const [tradeAmount, setTradeAmount] = useState('')
   const [isTrading, setIsTrading] = useState(false)
   const [tradeAction, setTradeAction] = useState<'buy' | 'sell' | null>(null)
@@ -43,32 +44,91 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
   const cardBase =
     'bg-sky-100 text-slate-900 rounded-xl p-6 border-4 border-black cursor-pointer shadow-[6px_6px_0_#000] hover:shadow-[8px_8px_0_#000] transition-transform duration-200 hover:-translate-x-1 hover:-translate-y-1'
   const neoInput =
-    'flex-1 bg-white text-slate-900 border-2 border-black rounded-lg focus:outline-none focus:ring-0 focus:border-black placeholder:text-slate-500'
+    'flex-1 bg-white text-slate-900 border-4 border-black rounded-lg shadow-[4px_4px_0_#000] focus:outline-none focus:ring-0 focus:border-black placeholder:text-slate-500 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_#000]'
   const neoButton =
-    'border-2 border-black rounded-lg shadow-[4px_4px_0_#000] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[2px_2px_0_#000] transition-all'
+    'border-4 border-black rounded-lg shadow-[6px_6px_0_#000] hover:translate-x-[3px] hover:translate-y-[3px] hover:shadow-[3px_3px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000] transition-all'
   const neoButtonSecondary =
     'bg-white hover:bg-slate-100 text-slate-900 '+neoButton
 
   // Load market data and check liquidity
   useEffect(() => {
-    // Initialize blockchain service with user's wallet
+    // Restore cached data for snappy UI
+    if (coin.tokenAddress) {
+      try {
+        const mdRaw = localStorage.getItem(`md:${coin.tokenAddress}`)
+        if (mdRaw) setMarketData(JSON.parse(mdRaw))
+        if (address) {
+          const balRaw = localStorage.getItem(`bal:${coin.tokenAddress}:${address}`)
+          if (balRaw) {
+            const bal = JSON.parse(balRaw)
+            setUserBalance(bal.token || '0')
+            setEthBalance(bal.eth || '0')
+          }
+        }
+      } catch {}
+    }
+    // Initialize blockchain service with user's wallet when available, but still fetch read-only data when not connected
     if (typeof window !== 'undefined' && (window as any).ethereum && isConnected) {
       const provider = new ethers.providers.Web3Provider((window as any).ethereum)
       blockchainTradingService.initialize(provider)
     }
 
-    if (coin.tokenAddress && isConnected) {
+    if (coin.tokenAddress) {
       loadMarketData()
       checkLiquidity()
-      loadUserBalances()
+      if (isConnected) {
+        loadUserBalances()
+      }
     }
   }, [coin.tokenAddress, isConnected, address])
+
+  // Load on-chain metadata for display, prefer on-chain over stored
+  useEffect(() => {
+    const loadChainInfo = async () => {
+      try {
+        if (!coin.tokenAddress) return
+        // Try cache first
+        try {
+          const cached = localStorage.getItem(`ti:${coin.tokenAddress}`)
+          if (cached) setDisplayCoin(prev => ({ ...prev, ...JSON.parse(cached) }) as any)
+        } catch {}
+        const info = await blockchainTradingService.getTokenInfo(coin.tokenAddress)
+        setDisplayCoin(prev => ({
+          ...prev,
+          name: info.name || prev.name,
+          symbol: info.symbol || prev.symbol,
+          description: info.description || prev.description,
+          creator: (info.creator || prev.creator || '').toString(),
+          createdAt: info.createdAt ? new Date(info.createdAt * 1000).toISOString() : (prev as any).createdAt,
+          imageHash: (info.imageRootHash as any) || (prev as any).imageHash,
+          imageRootHash: (info.imageRootHash as any) || (prev as any).imageRootHash,
+          metadataRootHash: (info.metadataRootHash as any) || (prev as any).metadataRootHash
+        }) as any)
+        try {
+          localStorage.setItem(`ti:${coin.tokenAddress}` , JSON.stringify({
+            name: info.name,
+            symbol: info.symbol,
+            description: info.description,
+            creator: (info.creator || '').toString(),
+            createdAt: info.createdAt ? new Date(info.createdAt * 1000).toISOString() : undefined,
+            imageHash: info.imageRootHash,
+            imageRootHash: info.imageRootHash,
+            metadataRootHash: info.metadataRootHash
+          }))
+        } catch {}
+      } catch (e) {
+        console.warn('Failed to load on-chain token info:', e)
+      }
+    }
+    loadChainInfo()
+  }, [coin.tokenAddress])
 
   const loadMarketData = async () => {
     try {
       if (coin.tokenAddress) {
         const data = await blockchainTradingService.getMarketData(coin.tokenAddress)
         setMarketData(data)
+        try { localStorage.setItem(`md:${coin.tokenAddress}`, JSON.stringify(data)) } catch {}
       }
     } catch (error) {
       console.error('Failed to load market data:', error)
@@ -126,6 +186,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
         const ethBalance = await blockchainTradingService.getETHBalance(address)
         setUserBalance(tokenBalance)
         setEthBalance(ethBalance)
+        try { localStorage.setItem(`bal:${coin.tokenAddress}:${address}`, JSON.stringify({ token: tokenBalance, eth: ethBalance })) } catch {}
       }
     } catch (error) {
       console.error('Failed to load balances:', error)
@@ -203,13 +264,13 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
     >
       {/* Header with Image and Basic Info */}
       <div className="flex items-start gap-4 mb-4">
-        <CoinImage coin={coin} size="md" />
+        <CoinImage coin={displayCoin as any} size="md" />
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-2xl font-extrabold tracking-tight">{coin.name}</h3>
-            <span className="text-sm text-slate-700">({coin.symbol})</span>
+            <h3 className="text-2xl font-extrabold tracking-tight">{displayCoin.name}</h3>
+            <span className="text-sm text-slate-700">({displayCoin.symbol})</span>
           </div>
-          <p className="text-sm text-slate-800 mb-3 leading-relaxed">{coin.description}</p>
+          <p className="text-sm text-slate-800 mb-3 leading-relaxed">{displayCoin.description}</p>
           
           {/* Real Market Data */}
           {marketData && (
@@ -246,7 +307,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       {isConnected && (
         <div className="grid grid-cols-2 gap-4 text-xs text-slate-700 mb-4 p-3 bg-white border-2 border-black rounded-lg shadow-[3px_3px_0_#000]">
           <div className="flex items-center justify-between">
-            <span>Your {coin.symbol}:</span>
+            <span>Your {displayCoin.symbol}:</span>
             <span className="text-slate-900 font-semibold">{formatBalance(userBalance)}</span>
           </div>
           <div className="flex items-center justify-between">
@@ -418,7 +479,7 @@ export default function TradingCard({ coin, onTrade, onClick }: TradingCardProps
       <div className="mt-4 pt-4 border-t-4 border-black text-xs text-slate-700">
         <div className="grid grid-cols-2 gap-2">
           <div>Contract: {coin.tokenAddress ? `${coin.tokenAddress.slice(0, 8)}...${coin.tokenAddress.slice(-6)}` : 'N/A'}</div>
-          <div>Creator: {coin.creator.slice(0, 6)}...{coin.creator.slice(-4)}</div>
+          <div>Creator: {(displayCoin.creator || '').slice(0, 6)}...{(displayCoin.creator || '').slice(-4)}</div>
         </div>
         
         {/* Social Media Links (Real URLs) */}

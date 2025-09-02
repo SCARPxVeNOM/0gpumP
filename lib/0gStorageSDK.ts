@@ -36,7 +36,7 @@ class OGStorageSDK {
     this.config = {
       segmentNumber: 1,
       expectedReplicas: 3,
-      backendUrl: 'http://localhost:4000',
+      backendUrl: (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000',
       ...config
     };
     this.backendUrl = this.config.backendUrl!;

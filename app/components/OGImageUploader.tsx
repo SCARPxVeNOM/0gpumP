@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Copy, Check, UploadCloud, ImageIcon, Trash2, Link as LinkIcon } from "lucide-react";
+import { UploadCloud, ImageIcon, Copy, Check, LinkIcon, Trash2 } from "lucide-react";
 
 interface OGImageUploaderProps {
   onImageUploaded?: (cid: string, file: File) => void;
@@ -19,9 +19,17 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
   const [success, setSuccess] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [uploads, setUploads] = useState<Array<{ cid: string; name: string; type: string }>>([]);
+  const [isReused, setIsReused] = useState(false);
+
+
 
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const API_BASE = useMemo(() => (typeof window !== "undefined" ? `${window.location.protocol}//${window.location.hostname}:4000` : "http://localhost:4000"), []);
+  const API_BASE = useMemo(() => {
+    const env = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) as string | undefined
+    if (env) return env
+    if (typeof window !== 'undefined') return `${window.location.protocol}//${window.location.hostname}:4000`
+    return 'http://localhost:4000'
+  }, []);
 
   const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -40,6 +48,46 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
     setPreviewUrl(URL.createObjectURL(f));
   };
 
+  // Check if file already exists on network
+  const checkFileExists = async (file: File): Promise<string | null> => {
+    try {
+      // For now, we'll use a simple approach: check if we have any recent uploads
+      // that might match this file. In a real implementation, you'd want to:
+      // 1. Calculate a proper file hash that matches 0G Storage format
+      // 2. Check against a database of uploaded files
+      // 3. Use content-addressed storage principles
+      
+      // For demonstration, we'll check if we have any recent uploads with the same name and size
+      // This is a simplified approach - in production you'd want proper content hashing
+      
+      // Check if file exists on network
+      const response = await fetch(`${API_BASE}/check-file`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileHash: `file_${file.name}_${file.size}`, // Simplified identifier
+          fileName: file.name,
+          fileSize: file.size
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.exists && result.rootHash) {
+          console.log('✅ File already exists on network:', result.rootHash);
+          return result.rootHash;
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('Could not check if file exists:', error);
+      return null;
+    }
+  };
+
   const onUpload = async () => {
     if (!file) return;
     setUploading(true);
@@ -47,94 +95,68 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
     setSuccess(null);
     setProgress(5);
 
-    const fallbackDirectUpload = async () => {
-      try {
-        const directForm = new FormData();
-        directForm.append('file', file);
-        const resp = await fetch(`${window.location.protocol}//${window.location.hostname}:3000/upload`, {
-          method: 'POST',
-          body: directForm
-        });
-        if (!resp.ok) throw new Error(`direct upload failed: ${resp.status}`);
-        const json = await resp.json();
-        const returned = json.rootHash || json.cid;
-        if (returned) {
-          setProgress(100);
-          setSuccess(returned);
-          setUploads((u) => [{ cid: returned, name: file.name, type: file.type }, ...u]);
-          onImageUploaded?.(returned, file);
-          return true;
-        }
-      } catch (e: any) {
-        console.error('Direct 0G kit upload failed:', e);
-      }
-      return false;
-    };
-
     try {
+      // First check if file already exists on network
+      setProgress(10);
+      const existingHash = await checkFileExists(file);
+      
+      if (existingHash) {
+        // File already exists, use existing hash
+        console.log('✅ Using existing file hash:', existingHash);
+        setSuccess(existingHash);
+        setUploads((u) => [{ cid: existingHash, name: file?.name || '', type: file?.type || '' }, ...u]);
+        if (onImageUploaded && file) {
+          onImageUploaded(existingHash, file);
+        }
+        setUploading(false);
+        setProgress(100);
+        return;
+      }
+
+      // File doesn't exist, proceed with upload
+      setProgress(20);
       const form = new FormData();
       form.append("file", file);
 
-      // Use XMLHttpRequest to report progress for multipart/form-data
-      await new Promise<void>(async (resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", `${API_BASE}/upload`);
-        xhr.upload.onprogress = (evt) => {
-          if (evt.lengthComputable) {
-            const pct = Math.min(95, Math.round((evt.loaded / evt.total) * 100));
-            setProgress(pct);
-          }
-        };
-        xhr.onreadystatechange = async () => {
-          if (xhr.readyState === 4) {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                const json = JSON.parse(xhr.responseText);
-                const returned = json.rootHash || json.cid; // prefer rootHash from 0G kit proxy
-                if (returned) {
-                  setProgress(100);
-                  setSuccess(returned);
-                  setUploads((u) => [{ cid: returned, name: file.name, type: file.type }, ...u]);
-                  
-                  // Call the callback if provided
-                  if (onImageUploaded) {
-                    onImageUploaded(returned, file);
-                  }
-                } else {
-                  setError("Upload succeeded but no rootHash returned");
-                }
-                resolve();
-              } catch (e) {
-                setError("Invalid server response");
-                reject(e);
-              }
-            } else {
-              // Backend failed; try direct 0G kit upload as fallback
-              const ok = await fallbackDirectUpload();
-              if (ok) resolve(); else {
-                setError(`Upload failed (${xhr.status})`);
-                reject(new Error(`Upload failed ${xhr.status}`));
-              }
-            }
-          }
-        };
-        xhr.onerror = async () => {
-          // Network error to backend; try direct 0G kit upload
-          const ok = await fallbackDirectUpload();
-          if (ok) resolve(); else {
-            setError("Network error while uploading");
-            reject(new Error("network"));
-          }
-        };
-        xhr.send(form);
+      // Upload to backend for background processing
+      const response = await fetch(`${API_BASE}/upload`, {
+        method: 'POST',
+        body: form
       });
-    } catch (e: any) {
-      console.error(e);
-    } finally {
+
+      if (!response.ok) {
+        throw new Error(`Upload failed (${response.status})`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.rootHash) {
+        if (result.reused) {
+          console.log('✅ File reused from network:', result.rootHash);
+          setIsReused(true);
+        } else {
+          console.log('✅ Direct upload successful:', result.rootHash);
+        }
+        setSuccess(result.rootHash);
+        setUploads((u) => [{ cid: result.rootHash, name: file?.name || '', type: file?.type || '' }, ...u]);
+        if (onImageUploaded && file) {
+          onImageUploaded(result.rootHash, file);
+        }
+        setUploading(false);
+        setProgress(100);
+      } else {
+        throw new Error('Upload failed - no root hash returned');
+      }
+
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      setError(error.message || 'Upload failed');
       setUploading(false);
-      setTimeout(() => setProgress(0), 800);
+      setProgress(0);
     }
   };
+
+  // Polling function removed - direct uploads only
 
   const reset = () => {
     setFile(null);
@@ -146,6 +168,7 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
     setSuccess(null);
     setCopied(false);
     setProgress(0);
+    setIsReused(false);
   };
 
   const copyCid = async () => {
@@ -238,13 +261,41 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
                 />
               </div>
 
+              {/* Upload Status */}
+              {uploading && (
+                <div className="text-sm text-slate-300 bg-slate-700/40 border border-slate-600/50 rounded-xl p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold">Upload Status</span>
+                    <span className="px-2 py-1 rounded text-xs bg-blue-500/20 text-blue-300">
+                      {progress < 20 ? 'Checking Network' : 'Uploading'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-400 mt-1">
+                    {progress < 20 
+                      ? 'Checking if file already exists on 0G Storage...' 
+                      : 'Uploading directly to 0G Storage...'
+                    }
+                  </div>
+                </div>
+              )}
+
+              {/* Reused File Status */}
+              {isReused && success && (
+                <div className="text-sm text-blue-300 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-blue-400">🔄</span>
+                    <span>File already exists on 0G Storage network - reusing existing hash!</span>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-3">
                 <button
                   disabled={uploading}
                   onClick={onUpload}
                   className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-60 disabled:cursor-not-allowed shadow-lg text-white font-semibold"
                 >
-                  {uploading ? "Uploading…" : "Upload to 0G Storage"}
+                  {uploading ? (progress < 20 ? "Checking Network…" : "Uploading…") : "Upload to 0G Storage"}
                 </button>
 
                 {success && (
@@ -276,7 +327,7 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
 
               {success && (
                 <div className="text-emerald-300 text-sm bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 break-all">
-                  Uploaded! CID: {success}
+                  {isReused ? 'File reused from network! ' : 'File ready! '}CID: {success}
                 </div>
               )}
             </div>
@@ -311,18 +362,10 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
                       href={`${API_BASE}/download/${u.cid}`}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-600/60 border border-slate-500/50 hover:bg-slate-600/80 text-slate-200"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-600/50 hover:bg-slate-600/70 text-slate-300 text-xs"
                     >
-                      <LinkIcon className="w-3 h-3" /> View
+                      <LinkIcon className="w-3 h-3" /> Open
                     </a>
-                    <button
-                      onClick={async () => {
-                        try { await navigator.clipboard.writeText(u.cid); } catch {}
-                      }}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-600/60 border border-slate-500/50 hover:bg-slate-600/80 text-slate-200"
-                    >
-                      <Copy className="w-3 h-3" /> Copy CID
-                    </button>
                   </div>
                 </div>
               </div>
@@ -330,10 +373,6 @@ export default function OGImageUploader({ onImageUploaded, className = "" }: OGI
           </div>
         </motion.div>
       )}
-
-      <div className="mt-4 text-center text-xs text-slate-500">
-        Backend: <span className="font-mono">{API_BASE}</span>
-      </div>
     </div>
   );
 }

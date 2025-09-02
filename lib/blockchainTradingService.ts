@@ -1,5 +1,4 @@
 import { ethers } from 'ethers'
-import { getCachedMarketSnapshot, saveMarketSnapshot } from './marketCache'
 
 // Contract ABIs
 const FACTORY_ABI = [
@@ -55,6 +54,18 @@ export interface MarketData {
   holders: number
 }
 
+export interface TokenInfo {
+  name: string
+  symbol: string
+  decimals: number
+  totalSupply: string
+  creator?: string
+  createdAt?: number
+  description?: string
+  imageRootHash?: string
+  metadataRootHash?: string
+}
+
 export interface LiquidityPool {
   tokenReserve: number
   ethReserve: number
@@ -83,7 +94,16 @@ class BlockchainTradingService {
   async initialize(provider: ethers.providers.Web3Provider) {
     this.provider = provider
     this.signer = provider.getSigner()
-    await this.ensureReadInitialized()
+
+    // Fallback read provider across two RPCs
+    try {
+      const primary = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_EVM_RPC) || 'https://evmrpc-testnet.0g.ai'
+      // Use a single reliable endpoint to avoid DNS issues
+      const readers = [ new ethers.providers.JsonRpcProvider(primary) ]
+      this.readProvider = new ethers.providers.FallbackProvider(readers, 1)
+    } catch {
+      this.readProvider = new ethers.providers.FallbackProvider([this.provider as any], 1)
+    }
     
     // Initialize contract instances
     this.readFactoryContract = new ethers.Contract(this.FACTORY_ADDRESS, FACTORY_ABI, this.readProvider as any)
@@ -92,80 +112,53 @@ class BlockchainTradingService {
     this.wethContract = new ethers.Contract(this.WETH_ADDRESS, ERC20_ABI, this.signer)
   }
 
-  private async ensureReadInitialized() {
-    if (this.readProvider && this.readFactoryContract) return
-    try {
-      const primary = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_EVM_RPC) || 'https://evmrpc-testnet.0g.ai'
-      const staticReader = new ethers.providers.StaticJsonRpcProvider(primary, { name: '0g-testnet', chainId: 16601 })
-      const readers = [ staticReader ]
-      this.readProvider = new ethers.providers.FallbackProvider(readers, 1)
-      await this.readProvider.getNetwork()
-      this.readFactoryContract = new ethers.Contract(this.FACTORY_ADDRESS, FACTORY_ABI, this.readProvider as any)
-    } catch {
-      // As a last resort, if a wallet provider exists, use it for reads
-      if (this.provider) {
-        this.readProvider = new ethers.providers.FallbackProvider([this.provider as any], 1)
-        this.readFactoryContract = new ethers.Contract(this.FACTORY_ADDRESS, FACTORY_ABI, this.readProvider as any)
-      }
-    }
+  // Ensure we have a read-only provider even if initialize hasn't been called
+  private getOrCreateReadProvider(): ethers.providers.FallbackProvider {
+    if (this.readProvider) return this.readProvider
+    const primary = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_EVM_RPC) || 'https://evmrpc-testnet.0g.ai'
+    const readers = [ new ethers.providers.JsonRpcProvider(primary) ]
+    this.readProvider = new ethers.providers.FallbackProvider(readers, 1)
+    // Lazily create read-only factory for convenience
+    this.readFactoryContract = new ethers.Contract(this.FACTORY_ADDRESS, FACTORY_ABI, this.readProvider as any)
+    return this.readProvider
   }
 
-  private getAmountOutBN(amountIn: ethers.BigNumber, reserveIn: ethers.BigNumber, reserveOut: ethers.BigNumber, feeBps: number = 30): ethers.BigNumber {
-    const feeDen = 10000
-    const amountInWithFee = amountIn.mul(feeDen - feeBps).div(feeDen)
-    const numerator = amountInWithFee.mul(reserveOut)
-    const denominator = reserveIn.add(amountInWithFee)
-    return numerator.div(denominator)
+  private bnToBigInt(v: ethers.BigNumber): bigint {
+    return BigInt(v.toString())
+  }
+
+  private getAmountOut(amountIn: bigint, reserveIn: bigint, reserveOut: bigint, feeBps: number = 30): bigint {
+    const feeDen = 10000n
+    const amountInWithFee = amountIn * (feeDen - BigInt(feeBps)) / feeDen
+    return (amountInWithFee * reserveOut) / (reserveIn + amountInWithFee)
   }
 
   private async getPairAddress(tokenAddress: string): Promise<string> {
-    await this.ensureReadInitialized()
-    if (!this.readFactoryContract || !this.readProvider) return ethers.constants.AddressZero
-    try {
-      // Ensure factory exists on this network
-      const factoryCode = await (this.readProvider as ethers.providers.Provider).getCode(this.FACTORY_ADDRESS)
-      if (!factoryCode || factoryCode === '0x') {
-        return ethers.constants.AddressZero
-      }
-      const pair = await this.readFactoryContract.getPair(tokenAddress, this.WETH_ADDRESS)
-      return pair
-    } catch {
-      return ethers.constants.AddressZero
+    if (!this.readFactoryContract) {
+      // Fall back to read-only provider if not initialized
+      this.getOrCreateReadProvider()
     }
+    const pair = await (this.readFactoryContract as ethers.Contract).getPair(tokenAddress, this.WETH_ADDRESS)
+    return pair
   }
 
   // Get token price from DEX pair reserves
   async getTokenPrice(tokenAddress: string): Promise<number> {
     try {
-      // Try recent cached snapshot first (30s)
-      const cached = await getCachedMarketSnapshot(tokenAddress, 30_000)
-      if (cached && typeof cached.price === 'number') return cached.price
+      const reader = this.getOrCreateReadProvider()
       const pairAddress = await this.getPairAddress(tokenAddress)
-      if (pairAddress === ethers.constants.AddressZero || !this.readProvider) return 0
-      // Guard against non-contract at pair address
-      const code = await (this.readProvider as ethers.providers.Provider).getCode(pairAddress)
-      if (!code || code === '0x') return 0
-      const pair = new ethers.Contract(pairAddress, PAIR_ABI, this.readProvider)
+      if (pairAddress === ethers.constants.AddressZero || !reader) return 0
+      const pair = new ethers.Contract(pairAddress, PAIR_ABI, reader)
       const [r0, r1] = await pair.getReserves()
-      const tokenIs0 = tokenAddress.toLowerCase() < this.WETH_ADDRESS.toLowerCase()
-      const tokenReserve = tokenIs0 ? r0 : r1
-      const wethReserve = tokenIs0 ? r1 : r0
-      if (tokenReserve.isZero() || wethReserve.isZero()) return 0
-      const priceWei = wethReserve.mul(ethers.constants.WeiPerEther).div(tokenReserve)
-      const price = parseFloat(ethers.utils.formatUnits(priceWei, 18))
-      // Save to 0G cache asynchronously (no await so UI isn't blocked)
-      saveMarketSnapshot(tokenAddress, {
-        tokenAddress,
-        timestamp: Date.now(),
-        price,
-        marketCap: 0,
-        reserves: { token: tokenReserve.toString(), weth: wethReserve.toString() },
-        pairAddress
-      }).catch(() => {})
-      return price
+      const token0 = await pair.token0()
+      const tokenIs0 = token0.toLowerCase() === tokenAddress.toLowerCase()
+      const tokenReserve = this.bnToBigInt(tokenIs0 ? r0 : r1)
+      const wethReserve = this.bnToBigInt(tokenIs0 ? r1 : r0)
+      if (tokenReserve === 0n || wethReserve === 0n) return 0
+      const priceWei = (wethReserve * 10n ** 18n) / tokenReserve
+      return Number(priceWei) / 1e18
     } catch (e) {
-      const fallback = await getCachedMarketSnapshot(tokenAddress, 5 * 60_000)
-      if (fallback && typeof fallback.price === 'number') return fallback.price
+      console.error('Error getting token price:', e)
       return 0
     }
   }
@@ -173,26 +166,16 @@ class BlockchainTradingService {
   // Get market data for a token
   async getMarketData(tokenAddress: string): Promise<MarketData> {
     try {
-      // Prefer cached
-      const cached = await getCachedMarketSnapshot(tokenAddress, 30_000)
-      const price = cached?.price ?? await this.getTokenPrice(tokenAddress)
+      const price = await this.getTokenPrice(tokenAddress)
       
-      // Get token contract for total supply
-      if (!this.provider && !this.readProvider) await this.ensureReadInitialized()
-      const readProv = (this.provider || this.readProvider) as ethers.providers.Provider
-      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, readProv)
+      // Get token contract for total supply using read provider
+      const reader = this.getOrCreateReadProvider()
+      const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, reader)
       const totalSupply = await tokenContract.totalSupply()
       const decimals = await tokenContract.decimals()
-      const totalSupplyNumber = parseFloat(ethers.utils.formatUnits(totalSupply, decimals))
+      
+      const totalSupplyNumber = totalSupply.toNumber() / Math.pow(10, decimals)
       const marketCap = price * totalSupplyNumber
-
-      // Update cache (quiet)
-      saveMarketSnapshot(tokenAddress, {
-        tokenAddress,
-        timestamp: Date.now(),
-        price,
-        marketCap
-      }).catch(() => {})
       
       return {
         currentPrice: price,
@@ -202,7 +185,7 @@ class BlockchainTradingService {
         holders: 0
       }
     } catch (error) {
-      console.debug('getMarketData: returning zeros due to read error')
+      console.error('Error getting market data:', error)
       return {
         currentPrice: 0,
         marketCap: 0,
@@ -237,15 +220,16 @@ class BlockchainTradingService {
       const pairAddress = await this.getPairAddress(tokenAddress)
       if (pairAddress === ethers.constants.AddressZero) throw new Error('No liquidity pool')
       const pair = new ethers.Contract(pairAddress, PAIR_ABI, this.signer)
-      const tokenIs0 = tokenAddress.toLowerCase() < this.WETH_ADDRESS.toLowerCase()
+      const token0 = await pair.token0()
+      const tokenIs0 = token0.toLowerCase() === tokenAddress.toLowerCase()
 
       // use readProvider for reserves
       const reader = this.readProvider || this.provider
       const readPair = new ethers.Contract(pairAddress, PAIR_ABI, reader)
       const [r0, r1] = await readPair.getReserves()
-      const reserveToken = tokenIs0 ? r0 : r1
-      const reserveWeth  = tokenIs0 ? r1 : r0
-      if (reserveToken.isZero() || reserveWeth.isZero()) throw new Error('Pool has zero reserves')
+      const reserveToken = this.bnToBigInt(tokenIs0 ? r0 : r1)
+      const reserveWeth  = this.bnToBigInt(tokenIs0 ? r1 : r0)
+      if (reserveToken === 0n || reserveWeth === 0n) throw new Error('Pool has zero reserves')
 
       let receipt: ethers.providers.TransactionReceipt
       if (action === 'buy') {
@@ -253,10 +237,11 @@ class BlockchainTradingService {
         const weth = new ethers.Contract(this.WETH_ADDRESS, IWETH_ABI, this.signer)
         await (await weth.deposit({ value: amtEth })).wait()
         await (await weth.transfer(pairAddress, amtEth)).wait()
-        const out = this.getAmountOutBN(amtEth, reserveWeth, reserveToken)
-        const minOut = out.mul(10000 - Math.floor(slippageTolerance * 100)).div(10000)
-        const amount0Out = tokenIs0 ? minOut : ethers.constants.Zero
-        const amount1Out = tokenIs0 ? ethers.constants.Zero : minOut
+        const out = this.getAmountOut(this.bnToBigInt(amtEth), reserveWeth, reserveToken)
+        const minOut = (out * BigInt(10000 - Math.floor(slippageTolerance * 100))) / 10000n
+        const outBN = ethers.BigNumber.from(minOut.toString())
+        const amount0Out = tokenIs0 ? outBN : ethers.constants.Zero
+        const amount1Out = tokenIs0 ? ethers.constants.Zero : outBN
         const tx = await pair.swap(amount0Out, amount1Out, await this.signer.getAddress(), '0x')
         receipt = await tx.wait()
       } else {
@@ -264,14 +249,15 @@ class BlockchainTradingService {
         const decimals: number = await token.decimals()
         const amtToken = ethers.utils.parseUnits(amount, decimals)
         await (await token.transfer(pairAddress, amtToken)).wait()
-        const out = this.getAmountOutBN(amtToken, reserveToken, reserveWeth)
-        const minOut = out.mul(10000 - Math.floor(slippageTolerance * 100)).div(10000)
-        const amount0Out = tokenIs0 ? ethers.constants.Zero : minOut
-        const amount1Out = tokenIs0 ? minOut : ethers.constants.Zero
+        const out = this.getAmountOut(this.bnToBigInt(amtToken), reserveToken, reserveWeth)
+        const minOut = (out * BigInt(10000 - Math.floor(slippageTolerance * 100))) / 10000n
+        const outBN = ethers.BigNumber.from(minOut.toString())
+        const amount0Out = tokenIs0 ? ethers.constants.Zero : outBN
+        const amount1Out = tokenIs0 ? outBN : ethers.constants.Zero
         const tx = await pair.swap(amount0Out, amount1Out, await this.signer.getAddress(), '0x')
         await tx.wait()
         const weth = new ethers.Contract(this.WETH_ADDRESS, IWETH_ABI, this.signer)
-        await (await weth.withdraw(minOut)).wait()
+        await (await weth.withdraw(outBN)).wait()
         receipt = await tx.wait()
       }
 
@@ -327,30 +313,22 @@ class BlockchainTradingService {
       if (!this.readFactoryContract || !this.readProvider) {
         throw new Error('Service not initialized')
       }
-      const pairAddress = await this.getPairAddress(tokenAddress)
+
+      const pairAddress = await this.readFactoryContract.getPair(tokenAddress, this.WETH_ADDRESS)
       if (pairAddress === ethers.constants.AddressZero) {
         return null // No pair exists
       }
 
-      // Verify code exists at pair address to avoid call exceptions
-      const code = await (this.readProvider as ethers.providers.Provider).getCode(pairAddress)
-      if (!code || code === '0x') {
-        return null
-      }
-
       const pairContract = new ethers.Contract(pairAddress, PAIR_ABI, this.readProvider)
-      let r0: ethers.BigNumber, r1: ethers.BigNumber
-      try {
-        ;[r0, r1] = await pairContract.getReserves()
-      } catch (_e) {
-        return null
-      }
-      const tokenIs0 = tokenAddress.toLowerCase() < this.WETH_ADDRESS.toLowerCase()
-      const tokenReserve = tokenIs0 ? r0 : r1
-      const ethReserve = tokenIs0 ? r1 : r0
+      const reserves = await pairContract.getReserves()
+      const token0 = await pairContract.token0()
 
-      const tokenReserveNumber = parseFloat(ethers.utils.formatUnits(tokenReserve, 18))
-      const ethReserveNumber = parseFloat(ethers.utils.formatUnits(ethReserve, 18))
+      const [tokenReserve, ethReserve] = token0.toLowerCase() === tokenAddress.toLowerCase() 
+        ? [reserves.reserve0, reserves.reserve1]
+        : [reserves.reserve1, reserves.reserve0]
+
+      const tokenReserveNumber = tokenReserve.toNumber() / Math.pow(10, 18)
+      const ethReserveNumber = ethReserve.toNumber() / Math.pow(10, 18)
       const tokenPrice = ethReserveNumber / tokenReserveNumber
 
       return {
@@ -359,7 +337,8 @@ class BlockchainTradingService {
         totalSupply: 0,
         tokenPrice
       }
-    } catch (_error) {
+    } catch (error) {
+      console.error('Error getting liquidity pool:', error)
       return null
     }
   }
@@ -367,13 +346,14 @@ class BlockchainTradingService {
   // Check if a liquidity pool exists for a token
   async hasLiquidityPool(tokenAddress: string): Promise<boolean> {
     try {
-      await this.ensureReadInitialized()
-      if (!this.readFactoryContract || !this.readProvider) return false
+      if (!this.readFactoryContract) {
+        throw new Error('Service not initialized')
+      }
 
-      const pairAddress = await this.getPairAddress(tokenAddress)
+      const pairAddress = await this.readFactoryContract.getPair(tokenAddress, this.WETH_ADDRESS)
       return pairAddress !== ethers.constants.AddressZero
     } catch (error) {
-      // Quietly return false on read errors
+      console.error('Error checking liquidity pool:', error)
       return false
     }
   }
@@ -402,6 +382,41 @@ class BlockchainTradingService {
       console.error('Error getting ETH balance:', error)
       return '0'
     }
+  }
+
+  // Best-effort on-chain token info (ERC20 + optional OGToken fields)
+  async getTokenInfo(tokenAddress: string): Promise<TokenInfo> {
+    const reader = this.getOrCreateReadProvider()
+    const baseErc20Abi = [
+      'function name() view returns (string)',
+      'function symbol() view returns (string)',
+      'function decimals() view returns (uint8)',
+      'function totalSupply() view returns (uint256)'
+    ]
+    const optionalMetaAbi = [
+      'function creator() view returns (address)',
+      'function createdAt() view returns (uint256)',
+      'function description() view returns (string)',
+      'function imageRootHash() view returns (bytes32)',
+      'function metadataRootHash() view returns (bytes32)'
+    ]
+    const contract = new ethers.Contract(tokenAddress, [...baseErc20Abi, ...optionalMetaAbi], reader)
+    const info: TokenInfo = {
+      name: '',
+      symbol: '',
+      decimals: 18,
+      totalSupply: '0'
+    }
+    try { info.name = await contract.name() } catch {}
+    try { info.symbol = await contract.symbol() } catch {}
+    try { info.decimals = await contract.decimals() } catch {}
+    try { const ts = await contract.totalSupply(); info.totalSupply = ethers.utils.formatUnits(ts, info.decimals) } catch {}
+    try { info.creator = await contract.creator() } catch {}
+    try { const ca = await contract.createdAt(); info.createdAt = Number(ca) } catch {}
+    try { info.description = await contract.description() } catch {}
+    try { const ih = await contract.imageRootHash(); info.imageRootHash = ih } catch {}
+    try { const mh = await contract.metadataRootHash(); info.metadataRootHash = mh } catch {}
+    return info
   }
 }
 

@@ -1,0 +1,14 @@
+{
+  "profileHash": "local:C:\\Users\\aryan\\Desktop\\0gPump\\data\\profiles\\0x2dc274abc0df37647ced9212e751524708a68996.json",
+  "avatarUrl": "http://localhost:3000/download/0xb6a1e6fdd3c949d025aa8de89915c9712735d2d66407899c2324c0b5de1359e2",
+  "updatedAt": "2025-09-02T13:26:37.136Z",
+  "username": "TEST",
+  "bio": "TEST🚀",
+  "preferences": {
+    "theme": "light",
+    "notifications": true,
+    "publicProfile": true,
+    "showTradingStats": true
+  },
+  "walletAddress": "0x2dc274abc0df37647ced9212e751524708a68996"
+}

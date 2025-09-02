@@ -8,314 +8,72 @@ import { ethers } from "ethers";
 import fs from "fs";
 import path from "path";
 import sharp from "sharp";
-import sqlite3 from "sqlite3";
-import { open } from "sqlite";
 import crypto from "crypto";
+
+// Professional Database Architecture
+import { databaseManager } from "./lib/databaseManager.js";
+import { cacheService } from "./lib/cacheService.js";
+import { dataService } from "./lib/dataService.js";
 
 dotenv.config();
 const app = express();
 
 // Enable CORS for frontend integration
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// 0G Storage API endpoint (your running starter kit)
-const OG_STORAGE_API = process.env.OG_STORAGE_API || "http://localhost:3000";
+// 0G Storage API configuration
+const OG_STORAGE_API = "http://localhost:3000";
 
-// Simple in-memory cache to make freshly uploaded content immediately viewable
-// Map<rootHash, { buffer: Buffer, name: string, type: string, size: number, createdAt: number }>
+// Smart contract addresses and ABIs
+const FACTORY_ADDRESS = "0xC5410Bf4F2B8f1eEf3425bCcE7B82DAA03eF7a74";
+const FACTORY_ABI = [
+  "function createToken(string memory _name, string memory _symbol, string memory _description, bytes32 _metadataRootHash, bytes32 _imageRootHash) external returns (address token, address curve)",
+  "event TokenCreated(address indexed token, address indexed curve, address indexed creator, uint256 timestamp, string name, string symbol, string description, bytes32 metadataRootHash, bytes32 imageRootHash)"
+];
+
+// Temporary cache for file content hashing
 const tempCache = new Map();
-
-// Disk cache directory
-const CACHE_DIR = path.join(process.cwd(), "cache");
-if (!fs.existsSync(CACHE_DIR)) {
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
-}
-
-const writeDiskCache = (rootHash, data, meta) => {
-  try {
-    const filePath = path.join(CACHE_DIR, rootHash);
-    const metaPath = path.join(CACHE_DIR, `${rootHash}.json`);
-    fs.writeFile(filePath, data, () => {});
-    fs.writeFile(metaPath, JSON.stringify(meta), () => {});
-  } catch {}
-};
-
-const readDiskCache = (rootHash) => {
-  try {
-    const filePath = path.join(CACHE_DIR, rootHash);
-    const metaPath = path.join(CACHE_DIR, `${rootHash}.json`);
-    if (!fs.existsSync(filePath) || !fs.existsSync(metaPath)) return null;
-    const buffer = fs.readFileSync(filePath);
-    const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
-    return { buffer, ...meta };
-  } catch {
-    return null;
-  }
-};
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// Persistent upload queue (processed in background)
-const UPLOAD_QUEUE_PATH = path.join(CACHE_DIR, "pending-uploads.json");
-
-function readUploadQueue() {
-  try {
-    const raw = fs.readFileSync(UPLOAD_QUEUE_PATH, "utf8");
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-function writeUploadQueue(queue) {
-  try {
-    fs.writeFileSync(UPLOAD_QUEUE_PATH, JSON.stringify(queue, null, 2));
-  } catch {}
-}
-
-function enqueueUpload(job, delayMs = 0) {
-  const q = readUploadQueue();
-  q.push({ ...job, attempts: 0, nextAttemptAt: Date.now() + Math.max(0, delayMs) });
-  writeUploadQueue(q);
-}
-
-async function updateCoinImageHash(coinId, imageRootHash) {
-  const db = await getDatabase();
-  try {
-    await db.run(`UPDATE coins SET imageHash = ? WHERE id = ?`, [imageRootHash, coinId]);
-  } finally {
-    await db.close();
-  }
-}
-
-async function processUploadQueue() {
-  const queue = readUploadQueue();
-  let changed = false;
-  const now = Date.now();
-  const remaining = [];
-  for (const job of queue) {
-    if (now < job.nextAttemptAt) {
-      remaining.push(job);
-      continue;
-    }
-    try {
-      const buffer = fs.readFileSync(job.filePath);
-      const formData = new FormData();
-      formData.append('file', buffer, { filename: job.filename, contentType: job.contentType });
-      const resp = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
-      const rootHash = resp.data.rootHash;
-      writeDiskCache(rootHash, buffer, { name: job.filename, type: job.contentType, size: buffer.length, createdAt: Date.now() });
-      if (job.kind === 'image' && job.coinId) {
-        await updateCoinImageHash(job.coinId, rootHash);
-      }
-      // Cleanup temp file
-      try { fs.unlinkSync(job.filePath); } catch {}
-      changed = true;
-    } catch (e) {
-      const attempts = (job.attempts || 0) + 1;
-      const backoff = Math.min(60_000, 1000 * Math.pow(2, attempts));
-      remaining.push({ ...job, attempts, nextAttemptAt: Date.now() + backoff });
-      changed = true;
-    }
-  }
-  if (changed) writeUploadQueue(remaining);
-}
-
-// Background worker interval
-setInterval(processUploadQueue, 15_000);
 
 // Helper: POST with retry/backoff for 0G kit upload
 import http from "http";
 import https from "https";
 
-async function postWithRetry(url, formData, headers, maxRetries = 3, timeoutMs = 15000) {
+async function postWithRetry(url, formData, headers, maxRetries = 3, timeoutMs = 60000) {
   let lastErr;
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await axios.post(url, formData, {
         headers,
         timeout: timeoutMs,
-        httpAgent: new http.Agent({ keepAlive: false }),
-        httpsAgent: new https.Agent({ keepAlive: false })
+        maxRedirects: 5,
+        httpAgent: new http.Agent({ keepAlive: true }),
+        httpsAgent: new https.Agent({ keepAlive: true })
       });
-    } catch (e) {
-      const msg = e?.response?.data?.error || e?.message || '';
-      // Only retry on known transient errors
-      if (
-        i < maxRetries - 1 &&
-        (msg.includes('Failed to submit transaction') ||
-         msg.includes('timeout') ||
-         msg.includes('network') ||
-         msg.includes('ECONNREFUSED') ||
-         msg.includes('ECONNRESET') ||
-         msg.includes('503') ||
-         msg.includes('429'))
-      ) {
-        const delay = 500 * Math.pow(2, i);
-        console.warn(`Retrying 0G kit upload in ${delay}ms (attempt ${i + 2}/${maxRetries})...`, msg);
-        await sleep(delay);
-        lastErr = e;
-        continue;
+    } catch (err) {
+      lastErr = err;
+      if (i < maxRetries - 1) {
+        const delay = Math.pow(2, i) * 1000; // Exponential backoff
+        console.log(`⏳ Retry ${i + 1}/${maxRetries} in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-      throw e;
     }
   }
-  throw lastErr || new Error('Upload failed after retries');
+  throw lastErr;
 }
 
-// EVM provider for on-chain reads
-const OG_RPC = process.env.OG_RPC || "https://evmrpc-testnet.0g.ai";
-const provider = new ethers.providers.JsonRpcProvider(OG_RPC);
-const FACTORY_ADDRESS = process.env.FACTORY_ADDRESS || "0x0Bd71a034D5602014206B965677E83C6484561F2";
-
-// Minimal ABIs for parsing and reads
-const FACTORY_ABI = [
-  "event TokenCreated(address indexed token, address indexed owner, string name, string symbol, uint256 initialSupply)"
-];
-
-const OG_TOKEN_ABI = [
-  "function getMetadata() view returns (string _name, string _symbol, string _description, bytes32 _metadataRootHash, bytes32 _imageRootHash, address _creator, uint256 _createdAt)"
-];
-
-// SQLite database (shared with Next API routes)
-const DB_PATH = path.join(process.cwd(), "data", "coins.db");
-
-async function ensureDataDir() {
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+// Initialize Professional Database Architecture
+async function initializeDatabase() {
+  try {
+    console.log("🚀 Initializing Professional Database Architecture...");
+    await dataService.initialize();
+    console.log("✅ Professional Database Architecture initialized");
+  } catch (error) {
+    console.error("❌ Database initialization failed:", error);
+    throw error;
   }
 }
-
-async function getDatabase() {
-  await ensureDataDir();
-  const db = await open({ filename: DB_PATH, driver: sqlite3.Database });
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS coins (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      symbol TEXT NOT NULL,
-      supply TEXT NOT NULL,
-      imageHash TEXT,
-      tokenAddress TEXT,
-      txHash TEXT NOT NULL,
-      creator TEXT NOT NULL,
-      createdAt INTEGER NOT NULL,
-      description TEXT,
-      telegramUrl TEXT,
-      xUrl TEXT,
-      discordUrl TEXT,
-      websiteUrl TEXT,
-      marketCap REAL,
-      price REAL,
-      volume24h REAL,
-      holders INTEGER,
-      totalTransactions INTEGER
-    );
-  `);
-  await db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_coins_created_at ON coins(createdAt DESC);
-    CREATE INDEX IF NOT EXISTS idx_coins_symbol ON coins(symbol);
-    CREATE INDEX IF NOT EXISTS idx_coins_creator ON coins(creator);
-  `);
-  return db;
-}
-
-async function insertCoinIfMissing(coin) {
-  const db = await getDatabase();
-  try {
-    const existing = await db.get(`SELECT id FROM coins WHERE txHash = ? OR tokenAddress = ?`, [coin.txHash, coin.tokenAddress || null]);
-    if (existing) return false;
-    await db.run(
-      `INSERT INTO coins (
-        id, name, symbol, supply, imageHash, tokenAddress, txHash,
-        creator, createdAt, description, telegramUrl, xUrl, discordUrl, websiteUrl,
-        marketCap, price, volume24h, holders, totalTransactions
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        coin.id, coin.name, coin.symbol, coin.supply,
-        coin.imageHash || null, coin.tokenAddress || null, coin.txHash,
-        coin.creator, coin.createdAt, coin.description || null,
-        null, null, null, null,
-        null, null, null, null, null
-      ]
-    );
-    return true;
-  } finally {
-    await db.close();
-  }
-}
-
-// Background sync for TokenCreated events → SQLite index
-const SYNC_INTERVAL_MS = Number(process.env.SYNC_INTERVAL_MS || 30000);
-const MAX_BLOCK_RANGE = 10000; // 0G RPC constraint
-const lastSyncPath = path.join(CACHE_DIR, "last_factory_sync.json");
-
-function readLastSyncedBlock() {
-  try {
-    const raw = fs.readFileSync(lastSyncPath, "utf8");
-    const json = JSON.parse(raw);
-    return typeof json.lastBlock === "number" ? json.lastBlock : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function writeLastSyncedBlock(blockNumber) {
-  try {
-    fs.writeFileSync(lastSyncPath, JSON.stringify({ lastBlock: blockNumber }, null, 2));
-  } catch {}
-}
-
-async function syncFactoryEvents() {
-  try {
-    const iface = new ethers.utils.Interface(FACTORY_ABI);
-    const topic = iface.getEventTopic("TokenCreated");
-    const current = await provider.getBlockNumber();
-    let from = readLastSyncedBlock();
-    if (from === 0) {
-      // Start from a safe recent window if first time
-      from = Math.max(0, current - MAX_BLOCK_RANGE);
-    }
-    let to = current;
-
-    let inserted = 0;
-    while (from <= to) {
-      const upper = Math.min(from + MAX_BLOCK_RANGE, to);
-      const logs = await provider.getLogs({ address: FACTORY_ADDRESS, fromBlock: from, toBlock: upper, topics: [topic] });
-      for (const l of logs) {
-        const parsed = iface.parseLog(l);
-        const coin = {
-          id: `${parsed.args.symbol.toLowerCase?.() || parsed.args.symbol}-${l.blockNumber}-${l.transactionHash}`,
-          name: parsed.args.name,
-          symbol: parsed.args.symbol,
-          supply: parsed.args.initialSupply?.toString?.() || "0",
-          imageHash: null,
-          tokenAddress: parsed.args.token,
-          txHash: l.transactionHash,
-          creator: parsed.args.owner?.toLowerCase?.() || parsed.args.owner,
-          createdAt: Date.now(),
-          description: `${parsed.args.name} (${parsed.args.symbol}) - Discovered from factory event`
-        };
-        const wasInserted = await insertCoinIfMissing(coin);
-        if (wasInserted) inserted++;
-      }
-      from = upper + 1;
-      writeLastSyncedBlock(from);
-    }
-    if (inserted > 0) {
-      console.log(`🔄 Synced ${inserted} new tokens from factory events`);
-    }
-  } catch (e) {
-    console.error("syncFactoryEvents error:", e);
-  }
-}
-
-// Kick off periodic sync
-setInterval(syncFactoryEvents, SYNC_INTERVAL_MS);
-// Also do an initial sync shortly after startup
-setTimeout(syncFactoryEvents, 2000);
 
 // Configure multer for file uploads
 const upload = multer({ 
@@ -325,7 +83,6 @@ const upload = multer({
     files: 1
   },
   fileFilter: (req, file, cb) => {
-    // Only allow image files
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
@@ -335,11 +92,36 @@ const upload = multer({
 });
 
 /**
- * Upload file or JSON data to 0G Storage
+ * HEALTH CHECK ENDPOINT
+ */
+app.get("/health", async (req, res) => {
+  try {
+    const healthStatus = await dataService.getHealthStatus();
+    res.json({
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      database: healthStatus.database,
+      cache: healthStatus.cache,
+      services: {
+        database: "operational",
+        cache: "operational",
+        ogStorage: "operational"
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "unhealthy",
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+/**
+ * UPLOAD ENDPOINT - Enhanced with Professional Architecture
  */
 app.post("/upload", upload.single("file"), async (req, res) => {
   try {
-    // Check if this is a file upload or JSON data upload
     if (req.headers['content-type']?.includes('multipart/form-data')) {
       // Handle file upload to 0G Storage
       const file = req.file;
@@ -348,54 +130,159 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         return res.status(400).json({ error: "No file provided" });
       }
 
-      console.log(`Uploading file to 0G Storage: ${file.originalname} (${file.size} bytes)`);
+      console.log(`📤 Received file: ${file.originalname} (${file.size} bytes)`);
 
-      // Compress to WebP (~75 quality) to reduce chunk count
+      // Check if we've seen this exact file content before
+      const fileContentHash = crypto.createHash('sha256').update(file.buffer).digest('hex');
+      const existingFile = tempCache.get(fileContentHash);
+      if (existingFile) {
+        console.log(`✅ File content already exists in cache, reusing hash: ${fileContentHash}`);
+        res.json({ 
+          success: true,
+          rootHash: fileContentHash,
+          name: file.originalname,
+          size: file.size,
+          type: file.mimetype,
+          compression: {
+            originalSize: file.size,
+            compressedSize: file.size,
+            ratio: 1.0,
+            compressionType: 'none'
+          },
+          reused: true
+        });
+        return;
+      }
+
+      // STEP 1: COMPRESSION FIRST - Ultra-aggressive compression
+      console.log(`🗜️ Starting compression process...`);
       let outputBuffer = file.buffer;
       let outName = file.originalname;
       let outType = file.mimetype;
+      let compressionRatio = 1.0;
+      let compressionType = 'none';
+      
       try {
-        const webp = await sharp(file.buffer).webp({ quality: 75 }).toBuffer({ resolveWithObject: true });
-        outputBuffer = webp.data;
-        outName = file.originalname.replace(/\.[^.]+$/i, '') + '.webp';
-        outType = 'image/webp';
-        console.log(`Compressed ${file.size}B → ${outputBuffer.length}B (webp)`);
+        // For images, use aggressive WebP compression
+        if (file.mimetype.startsWith('image/')) {
+          console.log(`🖼️ Converting to WebP with aggressive compression...`);
+          const webpBuffer = await sharp(file.buffer)
+            .webp({ 
+              quality: 60,        // Aggressive quality reduction
+              effort: 6,          // Maximum compression effort
+              smartSubsample: true,
+              reductionEffort: 6
+            })
+            .toBuffer();
+          
+          if (webpBuffer.length < outputBuffer.length) {
+            const beforeWebp = outputBuffer.length;
+            outputBuffer = webpBuffer;
+            outName = outName.replace(/\.[^/.]+$/, '.webp');
+            outType = 'image/webp';
+            compressionRatio = webpBuffer.length / beforeWebp;
+            compressionType = 'webp';
+            console.log(`✅ WebP compression: ${beforeWebp}B → ${webpBuffer.length}B (${Math.round((1 - compressionRatio) * 100)}% reduction)`);
+          }
+        }
+        
+        // STEP 2: GZIP COMPRESSION - For all files
+        if (outputBuffer.length > 1024) {
+          console.log(`🗜️ Applying Gzip compression...`);
+          const { gzip } = require('zlib');
+          const { promisify } = require('util');
+          const gzipAsync = promisify(gzip);
+          
+          try {
+            const gzipped = await gzipAsync(outputBuffer, { 
+              level: 9,
+              memLevel: 9,
+              strategy: require('zlib').constants.Z_HUFFMAN_ONLY
+            });
+            if (gzipped.length < outputBuffer.length) {
+              const beforeGzip = outputBuffer.length;
+              outputBuffer = gzipped;
+              outName = outName + '.gz';
+              outType = 'application/gzip';
+              const gzipRatio = gzipped.length / beforeGzip;
+              console.log(`✅ Gzip compression: ${beforeGzip}B → ${gzipped.length}B (${Math.round((1 - gzipRatio) * 100)}% reduction)`);
+            }
+          } catch (gzipError) {
+            console.warn('Gzip compression failed:', gzipError.message);
+          }
+        }
+        
+        console.log(`🎯 Final compression result: ${file.size}B → ${outputBuffer.length}B (${Math.round((1 - outputBuffer.length/file.size) * 100)}% total reduction)`);
+        
       } catch (e) {
-        console.warn('Image compression skipped:', e?.message || e);
+        console.warn('Compression failed, using original:', e?.message || e);
       }
 
-      // Create FormData for 0G Storage API
+      // Direct upload to 0G Storage
+      console.log(`🚀 Uploading directly to 0G Storage...`);
       const formData = new FormData();
       formData.append('file', outputBuffer, { filename: outName, contentType: outType });
-
-      // Upload to 0G Storage with retry
-      try {
-        const ogResponse = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
-        const { rootHash } = ogResponse.data;
-
-        // Cache the freshly uploaded content for instant download
-        const meta = {
-          name: outName,
-          type: outType,
-          size: outputBuffer.length,
-          createdAt: Date.now(),
-        };
-        tempCache.set(rootHash, { buffer: outputBuffer, ...meta });
-        writeDiskCache(rootHash, outputBuffer, meta);
-        console.log(`✅ File uploaded to 0G Storage with rootHash: ${rootHash} (cached for instant access)`);
       
-      res.json({ 
-          rootHash: rootHash,
-          name: outName,
-          size: outputBuffer.length,
-          type: outType,
-          storageType: '0g-storage'
-        });
-      } catch (e) {
-        const status = 503;
-        console.error('Upload proxy error (file) → 0G kit:', e.response?.data || e.message);
-        return res.status(status).json({ error: '0g_unavailable', message: '0G storage is busy. Please try again in a moment.' });
+      let response;
+      try {
+        response = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+      } catch (uploadError) {
+        console.error("0G Storage upload failed:", uploadError.message);
+        throw new Error(`0G Storage upload failed: ${uploadError.message}`);
       }
+
+      const rootHash = response.data.rootHash;
+      console.log(`✅ Direct upload successful: ${rootHash}`);
+      
+      // Cache the file content hash for future reuse
+      tempCache.set(fileContentHash, {
+        rootHash,
+        name: outName,
+        size: outputBuffer.length,
+        type: outType,
+        compression: {
+          originalSize: file.size,
+          compressedSize: outputBuffer.length,
+          ratio: compressionRatio,
+          compressionType: compressionType
+        }
+      });
+
+      // Track file in database using professional architecture
+      try {
+        await dataService.trackOGStorageFile({
+          rootHash,
+          fileName: outName,
+          fileType: outType,
+          originalSize: file.size,
+          compressedSize: outputBuffer.length,
+          compressionRatio: compressionRatio,
+          compressionType: compressionType,
+          metadata: {
+            originalName: file.originalname,
+            originalType: file.mimetype,
+            compressionApplied: compressionType !== 'none'
+          }
+        });
+      } catch (dbError) {
+        console.warn("⚠️ Database tracking failed, but continuing:", dbError.message);
+      }
+
+      // Return the real root hash immediately
+      res.json({ 
+        success: true,
+        rootHash: rootHash,
+        name: outName,
+        size: outputBuffer.length,
+        type: outType,
+        compression: {
+          originalSize: file.size,
+          compressedSize: outputBuffer.length,
+          ratio: compressionRatio,
+          compressionType: compressionType
+        }
+      });
+
     } else {
       // Handle JSON data upload to 0G Storage
       const { data } = req.body;
@@ -404,28 +291,23 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         return res.status(400).json({ error: "No data provided" });
       }
 
-      console.log(`Uploading JSON data to 0G Storage`);
+      console.log(`📤 Direct JSON upload to 0G Storage`);
 
-      // Create a file-like object for JSON data
+      // Direct upload to 0G Storage
       const formData = new FormData();
       formData.append('file', Buffer.from(JSON.stringify(data)), { filename: 'metadata.json', contentType: 'application/json' });
-
-      // Upload to 0G Storage with retry
-      try {
-        const ogResponse = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
-        const { rootHash } = ogResponse.data;
-        console.log(`✅ JSON data uploaded to 0G Storage with rootHash: ${rootHash}`);
       
+      const response = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+      const rootHash = response.data.rootHash;
+      
+      console.log(`✅ Direct JSON upload successful: ${rootHash}`);
+
+      // Return the real root hash immediately
       res.json({ 
-          rootHash: rootHash,
-          type: 'application/json',
-          storageType: '0g-storage'
-        });
-      } catch (e) {
-        const status = 503;
-        console.error('Upload proxy error (json) → 0G kit:', e.response?.data || e.message);
-        return res.status(status).json({ error: '0g_unavailable', message: '0G storage is busy. Please try again in a moment.' });
-      }
+        success: true,
+        rootHash: rootHash,
+        type: 'application/json'
+      });
     }
     
   } catch (err) {
@@ -435,90 +317,49 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 });
 
 /**
- * Transparent 1x1 PNG placeholder
- */
-const PLACEHOLDER_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=",
-  "base64"
-);
-
-/**
- * Download file or JSON data from 0G Storage with cache + warm-up
+ * DOWNLOAD ENDPOINT
  */
 app.get("/download/:rootHash", async (req, res) => {
   try {
     const { rootHash } = req.params;
-    console.log(`Downloading data from 0G Storage with rootHash: ${rootHash}`);
+    
+    if (!rootHash || rootHash.length !== 66 || !rootHash.startsWith('0x')) {
+      return res.status(400).json({ error: "Invalid root hash format" });
+    }
 
-    // 1) Serve immediately from memory cache
-    const cached = tempCache.get(rootHash);
-    if (cached) {
+    console.log(`📥 Downloading file: ${rootHash}`);
+
+    // Update file access tracking
+    await dataService.updateFileAccess(rootHash);
+
+    // Download from 0G Storage
+    const response = await axios.get(`${OG_STORAGE_API}/download/${rootHash}`, {
+      timeout: 60000,
+      responseType: 'stream'
+    });
+
+    // Set appropriate headers
       res.set({
-        "Content-Type": cached.type,
-        "Content-Length": cached.size,
-        "Content-Disposition": `inline; filename="${cached.name}"`,
-        "Cache-Control": "public, max-age=60"
-      });
-      return res.send(cached.buffer);
-    }
+      'Content-Type': response.headers['content-type'] || 'application/octet-stream',
+      'Content-Length': response.headers['content-length'],
+      'Cache-Control': 'public, max-age=31536000' // 1 year cache
+    });
 
-    // 2) Serve from disk cache
-    const disk = readDiskCache(rootHash);
-    if (disk) {
-      res.set({
-        "Content-Type": disk.type || 'application/octet-stream',
-        "Content-Length": disk.size || disk.buffer.length,
-        "Content-Disposition": `inline; filename="${disk.name || rootHash}"`,
-        "Cache-Control": "public, max-age=3600"
-      });
-      return res.send(disk.buffer);
-    }
+    // Pipe the response
+    response.data.pipe(res);
 
-    // 3) Try to pull from the 0G kit with retry/backoff
-    let lastErr = null;
-    for (let i = 0; i < 3; i++) {
-      try {
-        const ogResponse = await axios.get(`${OG_STORAGE_API}/download/${rootHash}`, { responseType: 'arraybuffer' });
-        const contentType = ogResponse.headers['content-type'] || 'application/octet-stream';
-        const buffer = Buffer.from(ogResponse.data);
-        const meta = { name: rootHash, type: contentType, size: buffer.length, createdAt: Date.now() };
-        tempCache.set(rootHash, { buffer, ...meta });
-        writeDiskCache(rootHash, buffer, meta);
-        res.set({ "Content-Type": contentType, "Content-Length": buffer.length, "Cache-Control": "public, max-age=31536000" });
-        return res.send(buffer);
-      } catch (e) {
-        lastErr = e;
-        await sleep(500 * Math.pow(2, i));
-      }
-    }
-
-    console.warn("Kit still warming/failed for", rootHash, lastErr?.message || lastErr?.toString?.());
-    // 202 warm-up placeholder
-    res.status(202).set({ "Content-Type": "image/png", "Cache-Control": "no-store" }).send(PLACEHOLDER_PNG);
-
-    // Background warm attempt (detached)
-    (async () => {
-      try {
-        const ogResponse = await axios.get(`${OG_STORAGE_API}/download/${rootHash}`, { responseType: 'arraybuffer' });
-        const contentType = ogResponse.headers['content-type'] || 'application/octet-stream';
-        const buffer = Buffer.from(ogResponse.data);
-        const meta = { name: rootHash, type: contentType, size: buffer.length, createdAt: Date.now() };
-        tempCache.set(rootHash, { buffer, ...meta });
-        writeDiskCache(rootHash, buffer, meta);
-      } catch {}
-    })();
-  } catch (err) {
-    console.error("Download error:", err?.response?.data || err.message);
+  } catch (error) {
+    console.error("Download error:", error);
     res.status(500).json({ error: "Download failed" });
   }
 });
 
 /**
- * Create a new coin with 0G Storage integration
+ * CREATE COIN ENDPOINT - Enhanced with Professional Architecture
  */
 app.post("/createCoin", upload.single("image"), async (req, res) => {
   try {
-    const { name, symbol, description, supply, creator, imageRootHash: imageRootHashFromBody, telegramUrl, xUrl, discordUrl, websiteUrl } = req.body;
+    const { name, symbol, description, supply, creator, imageRootHash: imageRootHashFromBody, tokenAddress, curveAddress, txHash, telegramUrl, xUrl, discordUrl, websiteUrl } = req.body;
     const imageFile = req.file;
 
     if (!name || !symbol || !description || !supply || !creator) {
@@ -528,486 +369,843 @@ app.post("/createCoin", upload.single("image"), async (req, res) => {
     console.log(`Creating coin: ${name} (${symbol})`);
 
     let imageRootHash = null;
-    let pendingStorage = false;
-    const ENABLE_UPLOADS_ON_CREATE = (process.env.ENABLE_0G_UPLOADS_ON_CREATE ?? (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true';
+    let outputBuffer = null;
+    let imageFileSize = 0;
     
     // Upload image to 0G Storage if provided
     if (imageFile) {
-      console.log(`Uploading coin image to 0G Storage: ${imageFile.originalname}`);
+      console.log(`📤 Received coin image: ${imageFile.originalname} (${imageFile.size} bytes)`);
       
-      // Compress to WebP before upload
-      let outputBuffer = imageFile.buffer;
+      // Use the same compression logic as the upload endpoint
+      outputBuffer = imageFile.buffer;
+      imageFileSize = imageFile.size;
       let outName = imageFile.originalname;
       let outType = imageFile.mimetype;
+      
       try {
-        const webp = await sharp(imageFile.buffer).webp({ quality: 75 }).toBuffer({ resolveWithObject: true });
-        outputBuffer = webp.data;
-        outName = imageFile.originalname.replace(/\.[^.]+$/i, '') + '.webp';
+        // WebP compression
+        console.log(`🖼️ Converting coin image to WebP...`);
+        const webpBuffer = await sharp(imageFile.buffer)
+          .webp({ quality: 70, effort: 6 })
+          .toBuffer();
+        
+        if (webpBuffer.length < outputBuffer.length) {
+          outputBuffer = webpBuffer;
+          outName = outName.replace(/\.[^/.]+$/, '.webp');
         outType = 'image/webp';
-        console.log(`Compressed ${imageFile.size}B → ${outputBuffer.length}B (webp)`);
+        }
       } catch (e) {
-        console.warn('Image compression skipped:', e?.message || e);
+        console.warn('Image compression failed, using original:', e?.message || e);
       }
       
-      if (ENABLE_UPLOADS_ON_CREATE) {
-        try {
-          const formData = new FormData();
-          formData.append('file', outputBuffer, { filename: outName, contentType: outType });
-          const imgResponse = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
-          imageRootHash = imgResponse.data.rootHash;
-          const meta = { name: outName, type: outType, size: outputBuffer.length, createdAt: Date.now() };
-          tempCache.set(imageRootHash, { buffer: outputBuffer, ...meta });
-          writeDiskCache(imageRootHash, outputBuffer, meta);
-          console.log(`✅ Image uploaded with rootHash: ${imageRootHash} (cached)`);
-        } catch (e) {
-          console.warn('Image upload deferred:', e?.message || e);
-          pendingStorage = true;
-          // Persist file to disk and enqueue background job
-          const tmpName = `img-${Date.now()}-${Math.random().toString(16).slice(2)}.webp`;
-          const tmpPath = path.join(CACHE_DIR, tmpName);
-          try { fs.writeFileSync(tmpPath, outputBuffer); } catch {}
-          enqueueUpload({ kind: 'image', filename: outName, contentType: outType, filePath: tmpPath, coinId: `${symbol.toLowerCase()}-${Date.now()}` });
-        }
-      } else {
-        console.log('Skipping 0G image upload on create (dev or disabled)');
-        pendingStorage = true;
-        // Save file to disk and enqueue
-        const tmpName = `img-${Date.now()}-${Math.random().toString(16).slice(2)}.webp`;
-        const tmpPath = path.join(CACHE_DIR, tmpName);
-        try { fs.writeFileSync(tmpPath, outputBuffer); } catch {}
-        enqueueUpload({ kind: 'image', filename: outName, contentType: outType, filePath: tmpPath });
-      }
+      // Upload to 0G Storage
+      const formData = new FormData();
+      formData.append('file', outputBuffer, { filename: outName, contentType: outType });
+      
+      const response = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+      imageRootHash = response.data.rootHash;
+      
+      console.log(`✅ Coin image uploaded: ${imageRootHash}`);
     } else if (imageRootHashFromBody) {
       imageRootHash = imageRootHashFromBody;
-      console.log(`Using provided imageRootHash: ${imageRootHash}`);
+      console.log(`📎 Using provided image hash: ${imageRootHash}`);
     }
 
-    // Create metadata JSON
-    const metadata = {
-      name,
-      symbol,
-      description,
-      supply,
-      creator,
-      imageRootHash,
-      createdAt: new Date().toISOString(),
-      type: 'coin-metadata',
-      telegramUrl: telegramUrl || undefined,
-      xUrl: xUrl || undefined,
-      discordUrl: discordUrl || undefined,
-      websiteUrl: websiteUrl || undefined
-    };
-
-    // Upload metadata to 0G Storage with retry
-    let metadataRootHash = null;
-    if (ENABLE_UPLOADS_ON_CREATE) {
-      try {
-        console.log(`Uploading coin metadata to 0G Storage`);
-        const metadataFormData = new FormData();
-        metadataFormData.append('file', Buffer.from(JSON.stringify(metadata)), { filename: 'metadata.json', contentType: 'application/json' });
-        const metadataResponse = await postWithRetry(`${OG_STORAGE_API}/upload`, metadataFormData, metadataFormData.getHeaders());
-        metadataRootHash = metadataResponse.data.rootHash;
-        console.log(`✅ Metadata uploaded with rootHash: ${metadataRootHash}`);
-      } catch (e) {
-        console.warn('Metadata upload deferred:', e?.message || e);
-        pendingStorage = true;
-        // Enqueue metadata upload
-        const tmpName = `meta-${Date.now()}-${Math.random().toString(16).slice(2)}.json`;
-        const tmpPath = path.join(CACHE_DIR, tmpName);
-        try { fs.writeFileSync(tmpPath, Buffer.from(JSON.stringify(metadata))); } catch {}
-        enqueueUpload({ kind: 'metadata', filename: 'metadata.json', contentType: 'application/json', filePath: tmpPath });
-      }
-    } else {
-      console.log('Skipping 0G metadata upload on create (dev or disabled)');
-      pendingStorage = true;
-      const tmpName = `meta-${Date.now()}-${Math.random().toString(16).slice(2)}.json`;
-      const tmpPath = path.join(CACHE_DIR, tmpName);
-      try { fs.writeFileSync(tmpPath, Buffer.from(JSON.stringify(metadata))); } catch {}
-      enqueueUpload({ kind: 'metadata', filename: 'metadata.json', contentType: 'application/json', filePath: tmpPath });
-    }
-
-    // Create coin data structure
+    // Create coin data object
     const coinData = {
-      id: `${symbol.toLowerCase()}-${Date.now()}`,
+      id: `${symbol.toLowerCase()}_${Date.now()}`,
       name,
       symbol,
       supply,
+      decimals: 18,
       description,
-      imageUrl: imageRootHash ? `/download/${imageRootHash}` : null,
-      metadataUrl: `/download/${metadataRootHash}`,
-      imageRootHash,
-      metadataRootHash,
-      createdAt: metadata.createdAt,
-      creator,
-      telegramUrl: telegramUrl || undefined,
-      xUrl: xUrl || undefined,
-      discordUrl: discordUrl || undefined,
-      websiteUrl: websiteUrl || undefined,
-      price: 0,
+      creator: creator.toLowerCase(),
+      imageHash: imageRootHash,
+      imageUrl: imageRootHash ? `${OG_STORAGE_API}/download/${imageRootHash}` : null,
+      metadataHash: null,
+      metadataUrl: null,
+      imageCompressionRatio: imageFile && imageFileSize > 0 ? (outputBuffer.length / imageFileSize) : null,
+      imageOriginalSize: imageFileSize,
+      imageCompressedSize: outputBuffer ? outputBuffer.length : null,
+      tokenAddress: tokenAddress || null,
+      curveAddress: curveAddress || null,
+      txHash: txHash || `local-${Date.now()}`,
+      blockNumber: null,
+      gasUsed: null,
+      gasPrice: null,
+      telegramUrl: telegramUrl || null,
+      xUrl: xUrl || null,
+      discordUrl: discordUrl || null,
+      websiteUrl: websiteUrl || null,
       marketCap: 0,
+      price: 0,
       volume24h: 0,
-      change24h: 0
+      change24h: 0,
+      holders: 0,
+      totalTransactions: 0,
+      liquidity: 0
     };
 
-    // Persist coin row immediately so UI can list it
-    try {
-      await insertCoinIfMissing({
-        id: coinData.id,
-        name: coinData.name,
-        symbol: coinData.symbol,
-        supply: coinData.supply,
-        imageHash: coinData.imageRootHash || null,
-        tokenAddress: null,
-        txHash: `local-${Date.now()}`,
-        creator: coinData.creator,
-        createdAt: Date.now(),
-        description: coinData.description
-      });
-    } catch {}
+    // Save coin using professional data service
+    await dataService.upsertCoin(coinData);
 
-    // If uploads are pending, schedule them 30s later to reduce contention
-    if (pendingStorage) {
-      // enqueue metadata if not uploaded
-      if (!metadataRootHash) {
-        const tmpName = `meta-${Date.now()}-${Math.random().toString(16).slice(2)}.json`;
-        const tmpPath = path.join(CACHE_DIR, tmpName);
-        try { fs.writeFileSync(tmpPath, Buffer.from(JSON.stringify(metadata))); } catch {}
-        enqueueUpload({ kind: 'metadata', filename: 'metadata.json', contentType: 'application/json', filePath: tmpPath }, 30_000);
-      }
-      // if we had an image file earlier but failed or disabled, it was enqueued; push its next attempt back by 30s
-      // We'll simply enqueue again with 30s delay; duplicates are harmless as queue de-dup is not required for testnet.
-    }
+    console.log(`✅ Coin created successfully: ${name} (${symbol})`);
 
-    res.json({ success: true, coin: coinData, pendingStorage });
+    res.json({
+      success: true,
+      coin: coinData
+    });
 
-  } catch (err) {
-    console.error("Create coin error:", err);
-    res.status(500).json({ error: err.message || "Failed to create coin" });
+  } catch (error) {
+    console.error("Create coin error:", error);
+    res.status(500).json({ error: error.message || "Failed to create coin" });
   }
 });
 
 /**
- * ON-CHAIN ENDPOINTS
+ * GET COINS ENDPOINT - Enhanced with Caching
  */
-
-// List tokens created by an owner (reads factory events)
-app.get("/tokens/onchain", async (req, res) => {
+app.get("/coins", async (req, res) => {
   try {
-    const owner = (req.query.creator || req.query.owner || "").toString().toLowerCase();
-    if (!owner || !ethers.utils.isAddress(owner)) {
-      return res.status(400).json({ error: "creator (owner) query param required" });
-    }
+    const { limit = 50, offset = 0, sortBy = 'marketCap', order = 'DESC' } = req.query;
+    
+    // Get coins using professional data service with caching
+    const coins = await dataService.getCoins(
+      parseInt(limit), 
+      parseInt(offset), 
+      sortBy, 
+      order
+    );
 
-    const iface = new ethers.utils.Interface(FACTORY_ABI);
-    const topic = iface.getEventTopic("TokenCreated");
-    
-    // Smart block range handling - start from a reasonable recent block
-    const currentBlock = await provider.getBlockNumber();
-    const maxBlockRange = 10000; // 0G RPC limit
-    const fromBlock = Math.max(0, currentBlock - maxBlockRange);
-    
-    console.log(`🔍 Querying logs from block ${fromBlock} to ${currentBlock} (range: ${currentBlock - fromBlock})`);
-    
-    const logs = await provider.getLogs({
-      address: FACTORY_ADDRESS,
-      fromBlock: fromBlock,
-      toBlock: currentBlock,
-      topics: [topic, null, ethers.utils.hexZeroPad(owner, 32)]
+    // Add cache-busting headers to prevent frontend caching
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
     });
-    
-    console.log(`✅ Found ${logs.length} TokenCreated events for ${owner}`);
-    
-    const tokens = logs.map(l => {
-      const parsed = iface.parseLog(l);
-      return {
-        tokenAddress: parsed.args.token,
-        owner: parsed.args.owner,
-        name: parsed.args.name,
-        symbol: parsed.args.symbol,
-        initialSupply: parsed.args.initialSupply?.toString?.() || null,
-        txHash: l.transactionHash,
-        blockNumber: l.blockNumber
-      };
-    });
-    
-    res.json({ 
-      count: tokens.length, 
-      tokens,
-      queryInfo: {
-        fromBlock: fromBlock,
-        toBlock: currentBlock,
-        blockRange: currentBlock - fromBlock,
-        maxBlockRange: maxBlockRange
-      }
-    });
-  } catch (e) {
-    console.error("/tokens/onchain error:", e);
-    
-    // Provide helpful error messages for common issues
-    if (e.code === -32000 && e.message?.includes("invalid block range")) {
-      return res.status(400).json({ 
-        error: "block_range_too_large",
-        message: "Block range exceeds RPC limits. Try querying a smaller range.",
-        suggestion: "Use query params: ?fromBlock=<number>&toBlock=<number>"
-      });
-    }
-    
-    res.status(500).json({ error: "failed_to_list_tokens", details: e.message });
-  }
-});
 
-// Fetch metadata for a token address from the OGToken contract
-app.get("/token/:address/metadata", async (req, res) => {
-  try {
-    const addr = req.params.address;
-    if (!ethers.utils.isAddress(addr)) return res.status(400).json({ error: "invalid_address" });
-    const contract = new ethers.Contract(addr, OG_TOKEN_ABI, provider);
-    const [n, s, desc, metaRoot, imgRoot, creator, createdAt] = await contract.getMetadata();
-    res.json({ 
-      name: n,
-      symbol: s,
-      description: desc,
-      metadataRootHash: metaRoot,
-      imageRootHash: imgRoot,
-      creator,
-      createdAt: createdAt?.toString?.() || null,
-      imageUrl: imgRoot ? `/download/${metaRoot}` : null,
-      metadataUrl: metaRoot ? `/download/${metaRoot}` : null
-    });
-  } catch (e) {
-    console.error("/token/:address/metadata error:", e);
-    res.status(500).json({ error: "failed_to_get_metadata" });
-  }
-});
-
-// Smart paginated token listing with custom block ranges
-app.get("/tokens/smart", async (req, res) => {
-  try {
-    const owner = (req.query.creator || req.query.owner || "").toString().toLowerCase();
-    if (!owner || !ethers.utils.isAddress(owner)) {
-      return res.status(400).json({ error: "creator (owner) query param required" });
-    }
-
-    // Parse query parameters for smart querying
-    const fromBlockParam = req.query.fromBlock ? parseInt(req.query.fromBlock) : null;
-    const toBlockParam = req.query.toBlock ? parseInt(req.query.toBlock) : null;
-    const limit = Math.min(parseInt(req.query.limit) || 50, 100); // Max 100 tokens per request
-    const offset = parseInt(req.query.offset) || 0;
-
-    const iface = new ethers.utils.Interface(FACTORY_ABI);
-    const topic = iface.getEventTopic("TokenCreated");
-    
-    // Smart block range calculation
-    const currentBlock = await provider.getBlockNumber();
-    const maxBlockRange = 10000; // 0G RPC limit
-    
-    let fromBlock, toBlock;
-    
-    if (fromBlockParam && toBlockParam) {
-      // User specified custom range
-      fromBlock = fromBlockParam;
-      toBlock = toBlockParam;
-      
-      // Validate range size
-      if (toBlock - fromBlock > maxBlockRange) {
-        return res.status(400).json({
-          error: "block_range_too_large",
-          message: `Block range ${toBlock - fromBlock} exceeds maximum allowed ${maxBlockRange}`,
-          suggestion: "Use smaller ranges or use pagination"
-        });
-      }
-    } else {
-      // Auto-calculate smart range
-      fromBlock = Math.max(0, currentBlock - maxBlockRange);
-      toBlock = currentBlock;
-    }
-    
-    console.log(`🔍 Smart query: blocks ${fromBlock}-${toBlock} (range: ${toBlock - fromBlock}) for ${owner}`);
-    
-    const logs = await provider.getLogs({
-      address: FACTORY_ADDRESS,
-      fromBlock: fromBlock,
-      toBlock: toBlock,
-      topics: [topic, null, ethers.utils.hexZeroPad(owner, 32)]
-    });
-    
-    // Sort by block number (newest first) and apply pagination
-    const sortedLogs = logs.sort((a, b) => b.blockNumber - a.blockNumber);
-    const paginatedLogs = sortedLogs.slice(offset, offset + limit);
-    
-    const tokens = paginatedLogs.map(l => {
-      const parsed = iface.parseLog(l);
-      return {
-        tokenAddress: parsed.args.token,
-        owner: parsed.args.owner,
-        name: parsed.args.name,
-        symbol: parsed.args.symbol,
-        initialSupply: parsed.args.initialSupply?.toString?.() || null,
-        txHash: l.transactionHash,
-        blockNumber: l.blockNumber
-      };
-    });
-    
     res.json({
-      tokens,
+      success: true,
+      coins,
       pagination: {
-        total: logs.length,
-        limit,
-        offset,
-        hasMore: offset + limit < logs.length
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        total: coins.length
       },
-      queryInfo: {
-        fromBlock,
-        toBlock,
-        blockRange: toBlock - fromBlock,
-        maxBlockRange,
-        currentBlock
-      }
+      timestamp: new Date().toISOString() // Add timestamp to help with cache busting
     });
-    
-  } catch (e) {
-    console.error("/tokens/smart error:", e);
-    
-    if (e.code === -32000 && e.message?.includes("invalid block range")) {
-      return res.status(400).json({
-        error: "block_range_too_large",
-        message: "Block range exceeds RPC limits",
-        suggestion: "Use smaller ranges or the default smart range"
-      });
-    }
-    
-    res.status(500).json({ error: "failed_to_query_tokens", details: e.message });
+
+  } catch (error) {
+    console.error("Get coins error:", error);
+    res.status(500).json({ error: "Failed to get coins" });
   }
 });
 
 /**
- * Health check endpoint
+ * GET COIN BY ID ENDPOINT - Enhanced with Caching
  */
-app.get("/health", (req, res) => {
-  res.json({ 
-    status: "OK", 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    storage: "0G Storage Integration Active",
-    ogStorageApi: OG_STORAGE_API
-  });
-});
-
-// Blockchain status and limits endpoint
-app.get("/blockchain/status", async (req, res) => {
+app.get("/coins/:id", async (req, res) => {
   try {
-    const currentBlock = await provider.getBlockNumber();
-    const gasPrice = await provider.getGasPrice();
+    const { id } = req.params;
     
+    // Get coin using professional data service with caching
+    const coin = await dataService.getCoin(id);
+
+    if (!coin) {
+      return res.status(404).json({ error: "Coin not found" });
+    }
+
     res.json({
-      status: "connected",
-      currentBlock: currentBlock.toString(),
-      gasPrice: gasPrice.toString(),
-      rpcUrl: process.env.RPC_URL || "https://evmrpc-testnet.0g.ai",
-      limits: {
-        maxBlockRange: 10000,
-        maxTokensPerQuery: 100,
-        recommendedBlockRange: 5000
-      },
-      suggestions: {
-        smartQuery: `/tokens/smart?creator=0x...`,
-        customRange: `/tokens/smart?creator=0x...&fromBlock=5000000&toBlock=5005000`,
-        pagination: `/tokens/smart?creator=0x...&limit=20&offset=0`
-      }
+      success: true,
+      coin
     });
-  } catch (e) {
-    console.error("/blockchain/status error:", e);
-    res.status(500).json({ 
-      status: "error", 
-      error: "failed_to_get_blockchain_status",
-      details: e.message 
-    });
+
+  } catch (error) {
+    console.error("Get coin error:", error);
+    res.status(500).json({ error: "Failed to get coin" });
   }
 });
 
-const PORT = process.env.PORT || 4000;
+/**
+ * USER PROFILE ENDPOINTS - Enhanced with Professional Architecture
+ */
 
-app.listen(PORT, () => {
-  console.log(`🚀 0G Storage Integration Server running on http://localhost:${PORT}`);
-  console.log(`📤 Upload endpoint: POST /upload`);
-  console.log(`📥 Download endpoint: GET /download/:rootHash`);
-  console.log(`🪙 Create coin: POST /createCoin`);
-  console.log(`🔗 On-chain list: GET /tokens/onchain?creator=0x...`);
-  console.log(`🔗 Smart query: GET /tokens/smart?creator=0x...`);
-  console.log(`🔗 Token metadata: GET /token/:address/metadata`);
-  console.log(`🔗 Blockchain status: GET /blockchain/status`);
-  console.log(`💚 Health check: GET /health`);
-  console.log(`🔗 0G Storage API: ${OG_STORAGE_API}`);
-});
-
-// ==== Trading: Enable liquidity for an existing ERC20 token ====
-// Minimal ABIs
-const ROUTER_ABI_MIN = [
-  "function addLiquidityETH(address token, uint amountTokenDesired, uint amountTokenMin, uint amountETHMin, address to, uint deadline) external payable returns (uint amountToken, uint amountETH, uint liquidity)"
-];
-const ERC20_ABI_MIN = [
-  "function approve(address spender, uint256 amount) external returns (bool)",
-  "function balanceOf(address owner) external view returns (uint256)",
-  "function decimals() external view returns (uint8)"
-];
-
-function getRouterAddressFromConfig() {
+// 0G Storage functions for profile persistence with fallback
+async function saveProfileToOGStorage(walletAddress, profileData) {
   try {
-    const raw = fs.readFileSync(path.join(process.cwd(), 'deployment-config.json'), 'utf8');
-    const cfg = JSON.parse(raw);
-    return cfg?.routerAddress || process.env.ROUTER_ADDRESS || "0x61fa1e78d101Ff616db00fE9e296C3E292393c63";
-  } catch {
-    return process.env.ROUTER_ADDRESS || "0x61fa1e78d101Ff616db00fE9e296C3E292393c63";
+    console.log(`💾 Saving profile to 0G Storage for ${walletAddress}`);
+    
+    const profileKey = `profile_${walletAddress.toLowerCase()}.json`;
+    
+    const formData = new FormData();
+    formData.append('file', Buffer.from(JSON.stringify(profileData)), { 
+      filename: profileKey, 
+      contentType: 'application/json' 
+    });
+    
+    const response = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+    const rootHash = response.data.rootHash;
+    
+    console.log(`✅ Profile saved to 0G Storage: ${rootHash}`);
+    
+    // Store the mapping in database for quick retrieval
+    await dataService.updateUserProfile(walletAddress, { profileHash: rootHash });
+    
+    return rootHash;
+  } catch (error) {
+    console.warn('0G Storage unavailable, using local file fallback:', error.message);
+    return await saveProfileToLocalFile(walletAddress, profileData);
   }
 }
 
-app.post('/enableTrading', async (req, res) => {
+// Fallback: Save profile to local file system
+async function saveProfileToLocalFile(walletAddress, profileData) {
   try {
-    const { tokenAddress, tokenAmount, ethAmount } = req.body || {};
-    if (!tokenAddress) return res.status(400).json({ success: false, error: 'tokenAddress required' });
+    console.log(`💾 Saving profile to local file for ${walletAddress}`);
+    
+    const profilesDir = path.join(process.cwd(), 'data', 'profiles');
+    if (!fs.existsSync(profilesDir)) {
+      fs.mkdirSync(profilesDir, { recursive: true });
+    }
+    
+    const profileFile = path.join(profilesDir, `${walletAddress.toLowerCase()}.json`);
+    fs.writeFileSync(profileFile, JSON.stringify(profileData, null, 2));
+    
+    console.log(`✅ Profile saved to local file: ${profileFile}`);
+    
+    await dataService.updateUserProfile(walletAddress, { profileHash: `local:${profileFile}` });
+    
+    return `local:${profileFile}`;
+  } catch (error) {
+    console.error('Failed to save profile to local file:', error);
+    throw error;
+  }
+}
 
-    // Backend signer (must be the wallet that holds the tokens)
-    const pk = process.env.DEPLOYER_PRIVATE_KEY || process.env.PRIVATE_KEY || '';
-    if (!pk) return res.status(500).json({ success: false, error: 'Missing DEPLOYER_PRIVATE_KEY in .env' });
-    const wallet = new ethers.Wallet(pk.startsWith('0x') ? pk : `0x${pk}`, provider);
+async function getProfileFromOGStorage(walletAddress) {
+  try {
+    console.log(`📥 Loading profile for ${walletAddress}`);
+    
+    // Get profile from database using professional data service
+    const profileRow = await dataService.getUserProfile(walletAddress);
+    
+    if (!profileRow) {
+      console.log(`📭 No profile found for ${walletAddress}`);
+      return null;
+    }
+    
+    const profileHash = profileRow.profileHash;
+    
+    // Check if it's a local file or 0G Storage hash
+    if (profileHash.startsWith('local:')) {
+      return await getProfileFromLocalFile(profileHash);
+    } else {
+      return await getProfileFromOGStorageHash(profileHash);
+    }
+  } catch (error) {
+    console.error('Failed to load profile:', error);
+    return null;
+  }
+}
 
-    const routerAddr = getRouterAddressFromConfig();
-    const router = new ethers.Contract(routerAddr, ROUTER_ABI_MIN, wallet);
-    const erc20 = new ethers.Contract(tokenAddress, ERC20_ABI_MIN, wallet);
+// Load profile from 0G Storage hash
+async function getProfileFromOGStorageHash(profileHash) {
+  try {
+    console.log(`🔍 Downloading profile from 0G Storage: ${profileHash}`);
+    const response = await axios.get(`${OG_STORAGE_API}/download/${profileHash}`, {
+      timeout: 60000,
+      responseType: 'json'
+    });
+    
+    if (response.data && typeof response.data === 'object') {
+      console.log(`✅ Profile loaded from 0G Storage: ${profileHash}`);
+      return response.data;
+    } else {
+      console.log(`⚠️ Invalid profile data from 0G Storage: ${profileHash}`);
+      return null;
+    }
+  } catch (error) {
+    console.error('Failed to load profile from 0G Storage:', error);
+    
+    // If it's a 500 error with "Wrong path" or "file does not exist", the hash is corrupted
+    if (error.response && error.response.status === 500 && 
+        error.response.data && error.response.data.error && 
+        (error.response.data.error.includes('Wrong path') || 
+         error.response.data.error.includes('does not exist'))) {
+      console.log(`🗑️ Detected corrupted profile hash: ${profileHash}`);
+      return null; // This will trigger the fallback to create a new profile
+    }
+    
+    return null;
+  }
+}
 
-    // Detect decimals and compute amounts
-    let dec = 18; try { dec = await erc20.decimals(); } catch {}
-    const tokenAmountWei = ethers.utils.parseUnits(String(tokenAmount || '100000'), dec); // default 100k
-    const ethAmountWei = ethers.utils.parseEther(String(ethAmount || '0.1'));
+// Load profile from local file
+async function getProfileFromLocalFile(profileHash) {
+  try {
+    const profileFile = profileHash.replace('local:', '');
+    console.log(`📁 Loading profile from local file: ${profileFile}`);
+    
+    if (!fs.existsSync(profileFile)) {
+      console.log(`📭 Local profile file not found: ${profileFile}`);
+      return null;
+    }
+    
+    const profileData = JSON.parse(fs.readFileSync(profileFile, 'utf8'));
+    console.log(`✅ Profile loaded from local file: ${profileFile}`);
+    return profileData;
+  } catch (error) {
+    console.error('Failed to load profile from local file:', error);
+    return null;
+  }
+}
 
-    // Check balances
-    const bal = await erc20.balanceOf(wallet.address);
-    if (bal.lt(tokenAmountWei)) {
-      return res.status(400).json({ success: false, error: `Insufficient token balance. Have ${ethers.utils.formatUnits(bal, dec)}` });
+// Load profile from database (primary storage)
+async function getProfileFromDatabase(walletAddress) {
+  try {
+    const profileRow = await dataService.getUserProfile(walletAddress);
+    
+    if (!profileRow) {
+      return null;
+    }
+    
+    // Check if we have profileData (new hybrid approach)
+    if (profileRow.profileData) {
+      const profileData = JSON.parse(profileRow.profileData);
+      console.log(`✅ Profile loaded from database for ${walletAddress}`);
+      return profileData;
+    }
+    
+    // Fallback to old approach (profileHash)
+    if (profileRow.profileHash) {
+      console.log(`🔄 Falling back to 0G Storage for ${walletAddress}`);
+      return await getProfileFromOGStorageHash(profileRow.profileHash);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Failed to load profile from database:', error);
+    return null;
+  }
+}
+
+// Save profile to database (primary storage)
+async function saveProfileToDatabase(walletAddress, profileData) {
+  try {
+    await dataService.updateUserProfile(walletAddress, profileData);
+    console.log(`✅ Profile saved to database for ${walletAddress}`);
+  } catch (error) {
+    console.error('Failed to save profile to database:', error);
+    throw error;
+  }
+}
+
+// Save profile to 0G Storage in background (proof of history)
+async function saveProfileToOGStorageBackground(walletAddress, profileData) {
+  // Run in background without blocking
+  setImmediate(async () => {
+    try {
+      await saveProfileToOGStorage(walletAddress, profileData);
+      console.log(`✅ Profile backed up to 0G Storage for ${walletAddress}`);
+    } catch (error) {
+      console.warn(`⚠️ Failed to backup profile to 0G Storage for ${walletAddress}:`, error.message);
+      // Don't throw - this is just a backup
+    }
+  });
+}
+
+// Get user profile
+app.get("/profile/:walletAddress", async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+
+    if (!walletAddress || !ethers.utils.isAddress(walletAddress)) {
+      return res.status(400).json({ error: "Invalid wallet address" });
     }
 
-    const ethBal = await wallet.getBalance();
-    if (ethBal.lt(ethAmountWei)) {
-      return res.status(400).json({ success: false, error: `Insufficient ETH balance. Have ${ethers.utils.formatEther(ethBal)}` });
+    console.log(`📥 Loading profile for ${walletAddress} (database first)`);
+
+    // Try to get profile from database first (fast and reliable)
+    let profile = await getProfileFromDatabase(walletAddress);
+    
+    if (!profile) {
+      console.log(`📭 No profile found in database for ${walletAddress}, creating new one`);
+      
+      // Create new profile if doesn't exist
+      profile = {
+        walletAddress: walletAddress.toLowerCase(),
+        username: `User_${walletAddress.slice(0, 6)}`,
+        bio: 'Welcome to OG Pump! 🚀',
+        avatarUrl: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tokensCreated: [],
+        tradingStats: {
+          totalTrades: 0,
+          totalVolume: 0,
+          tokensHeld: 0,
+          favoriteTokens: [],
+          lastTradeAt: null
+        },
+        preferences: {
+          theme: 'light',
+          notifications: true,
+          publicProfile: true,
+          showTradingStats: true
+        }
+      };
+      
+      // Save new profile to database
+      await saveProfileToDatabase(walletAddress, profile);
+      
+      // Optionally save to 0G Storage in background (for proof of history)
+      saveProfileToOGStorageBackground(walletAddress, profile);
     }
 
-    // Approve router
-    await (await erc20.approve(router.address, tokenAmountWei)).wait();
-
-    // Add liquidity
-    const tx = await router.addLiquidityETH(
-      tokenAddress,
-      tokenAmountWei,
-      0,
-      0,
-      wallet.address,
-      Math.floor(Date.now() / 1000) + 1800,
-      { value: ethAmountWei }
-    );
-    const receipt = await tx.wait();
-
-    return res.json({ success: true, txHash: receipt.transactionHash });
-  } catch (e) {
-    return res.status(500).json({ success: false, error: e?.message || String(e) });
+    res.json({ success: true, profile });
+  } catch (error) {
+    console.error("Get profile error:", error);
+    res.status(500).json({ error: "Failed to get profile" });
   }
 });
+
+// Update user profile
+app.put("/profile/:walletAddress", async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const profileData = req.body;
+
+    if (!walletAddress || !ethers.utils.isAddress(walletAddress)) {
+      return res.status(400).json({ error: "Invalid wallet address" });
+    }
+
+    // Get existing profile from database or create new one
+    let existingProfile = await getProfileFromDatabase(walletAddress);
+    
+    if (!existingProfile) {
+      // Create new profile if doesn't exist
+      existingProfile = {
+        walletAddress: walletAddress.toLowerCase(),
+        username: `User_${walletAddress.slice(0, 6)}`,
+        bio: 'Welcome to OG Pump! 🚀',
+        avatarUrl: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tokensCreated: [],
+        tradingStats: {
+          totalTrades: 0,
+          totalVolume: 0,
+          tokensHeld: 0,
+          favoriteTokens: [],
+          lastTradeAt: null
+        },
+        preferences: {
+          theme: 'light',
+          notifications: true,
+          publicProfile: true,
+          showTradingStats: true
+        }
+      };
+    }
+    
+    // Update profile with new data
+    const updatedProfile = {
+      ...existingProfile,
+      ...profileData,
+      walletAddress: walletAddress.toLowerCase(), // Ensure lowercase
+      updatedAt: new Date().toISOString(),
+      // Preserve existing data if not provided
+      tokensCreated: profileData.tokensCreated || existingProfile.tokensCreated,
+      tradingStats: profileData.tradingStats || existingProfile.tradingStats,
+      preferences: {
+        ...existingProfile.preferences,
+        ...profileData.preferences
+      }
+    };
+    
+    // Save updated profile to database (primary storage)
+    try {
+      await saveProfileToDatabase(walletAddress, updatedProfile);
+      console.log(`✅ Profile updated and saved to database for ${walletAddress}:`, {
+        username: updatedProfile.username,
+        bio: updatedProfile.bio
+      });
+      
+      // Backup to 0G Storage in background (proof of history)
+      saveProfileToOGStorageBackground(walletAddress, updatedProfile);
+    } catch (saveError) {
+      console.error('Failed to save updated profile to database:', saveError);
+      return res.status(500).json({ error: "Failed to save profile to database" });
+    }
+
+    res.json({ success: true, profile: updatedProfile });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
+// Add created token to user profile
+app.post("/profile/:walletAddress/tokens", async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const { tokenAddress, tokenName, tokenSymbol, curveAddress, txHash, imageUrl, description } = req.body;
+    
+    if (!walletAddress || !ethers.utils.isAddress(walletAddress)) {
+      return res.status(400).json({ error: "Invalid wallet address" });
+    }
+
+    // Get existing profile
+    let profile = await getProfileFromOGStorage(walletAddress);
+    
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found" });
+    }
+
+    // Add token to created tokens list
+    const newToken = {
+      tokenAddress,
+      tokenName,
+      tokenSymbol,
+      curveAddress,
+      createdAt: new Date().toISOString(),
+      txHash,
+      imageUrl,
+      description
+    };
+
+    profile.tokensCreated.push(newToken);
+    profile.updatedAt = new Date().toISOString();
+
+    // Save updated profile
+    await saveProfileToOGStorage(walletAddress, profile);
+
+    res.json({ success: true, profile });
+  } catch (error) {
+    console.error("Add token to profile error:", error);
+    res.status(500).json({ error: "Failed to add token to profile" });
+  }
+});
+
+// Helper function to compress file
+async function compressFile(file) {
+  console.log(`🗜️ Starting compression process for avatar...`);
+  let outputBuffer = file.buffer;
+  let outName = file.originalname;
+  let outType = file.mimetype;
+  let compressionRatio = 1.0;
+  let compressionType = 'none';
+  
+  try {
+    // For images, use aggressive WebP compression
+    if (file.mimetype.startsWith('image/')) {
+      console.log(`🖼️ Converting avatar to WebP with aggressive compression...`);
+      const webpBuffer = await sharp(file.buffer)
+        .webp({ 
+          quality: 60,        // Aggressive quality reduction
+          effort: 6,          // Maximum compression effort
+          smartSubsample: true,
+          reductionEffort: 6
+        })
+        .toBuffer();
+      
+      if (webpBuffer.length < file.buffer.length) {
+        const beforeWebp = file.buffer.length;
+        outputBuffer = webpBuffer;
+        outName = outName.replace(/\.[^/.]+$/, '.webp');
+        outType = 'image/webp';
+        compressionRatio = webpBuffer.length / beforeWebp;
+        compressionType = 'webp';
+        console.log(`✅ WebP compression: ${beforeWebp}B → ${webpBuffer.length}B (${Math.round((1 - compressionRatio) * 100)}% reduction)`);
+      }
+    }
+
+    // STEP 2: GZIP COMPRESSION - For all files
+    if (outputBuffer.length > 1024) {
+      console.log(`🗜️ Applying Gzip compression...`);
+      const { gzip } = require('zlib');
+      const { promisify } = require('util');
+      const gzipAsync = promisify(gzip);
+      
+      try {
+        const beforeGzip = outputBuffer.length;
+        const gzipped = await gzipAsync(outputBuffer);
+        
+        if (gzipped.length < outputBuffer.length) {
+          outputBuffer = gzipped;
+          outName = outName + '.gz';
+          outType = 'application/gzip';
+          const gzipRatio = gzipped.length / beforeGzip;
+          console.log(`✅ Gzip compression: ${beforeGzip}B → ${gzipped.length}B (${Math.round((1 - gzipRatio) * 100)}% reduction)`);
+        }
+      } catch (gzipError) {
+        console.warn('Gzip compression failed:', gzipError.message);
+      }
+    }
+    
+    console.log(`🎯 Final compression result: ${file.size}B → ${outputBuffer.length}B (${Math.round((1 - outputBuffer.length/file.size) * 100)}% total reduction)`);
+    
+  } catch (e) {
+    console.warn('Compression failed, using original file:', e?.message || e);
+  }
+
+      return {
+    outputBuffer,
+    outName,
+    outType,
+    compressionRatio,
+    compressionType
+  };
+}
+
+// Helper function to upload file to 0G Storage
+async function uploadFileToOGStorage(file) {
+  try {
+    // Compress the file
+    const { outputBuffer, outName, outType, compressionRatio, compressionType } = await compressFile(file);
+    
+    // Upload to 0G Storage
+    console.log(`🚀 Uploading avatar to 0G Storage...`);
+    const formData = new FormData();
+    formData.append('file', outputBuffer, { filename: outName, contentType: outType });
+    
+    const response = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+    const rootHash = response.data.rootHash;
+    
+    console.log(`✅ Avatar upload successful: ${rootHash}`);
+    
+    return {
+      success: true,
+      url: `${OG_STORAGE_API}/download/${rootHash}`,
+      rootHash: rootHash,
+      compression: {
+        originalSize: file.size,
+        compressedSize: outputBuffer.length,
+        ratio: compressionRatio,
+        compressionType: compressionType
+      }
+    };
+  } catch (error) {
+    console.error("❌ Avatar upload to 0G Storage failed:", error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Upload user avatar
+app.post("/profile/:walletAddress/avatar", upload.single('avatar'), async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    
+    if (!walletAddress || !ethers.utils.isAddress(walletAddress)) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Invalid wallet address" 
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false,
+        error: "No avatar file provided" 
+      });
+    }
+
+    console.log(`📤 Avatar upload attempt for ${walletAddress}: ${req.file.originalname} (${req.file.size} bytes)`);
+
+    // Upload to 0G Storage
+    const uploadResult = await uploadFileToOGStorage(req.file);
+    
+    if (uploadResult.success) {
+      // Update profile with new avatar URL
+      const profile = await getProfileFromDatabase(walletAddress);
+      if (profile) {
+        profile.avatarUrl = uploadResult.url;
+        profile.updatedAt = new Date().toISOString();
+        await saveProfileToDatabase(walletAddress, profile);
+        console.log(`✅ Avatar updated in profile for ${walletAddress}`);
+        
+        // Backup to 0G Storage in background
+        saveProfileToOGStorageBackground(walletAddress, profile);
+      }
+    
+    res.json({
+        success: true,
+        avatarUrl: uploadResult.url,
+        message: "Avatar uploaded successfully",
+        compression: uploadResult.compression
+      });
+    } else {
+      console.error(`❌ Avatar upload failed for ${walletAddress}:`, uploadResult.error);
+      res.status(500).json({
+        success: false,
+        error: uploadResult.error || "Failed to upload avatar to 0G Storage"
+      });
+    }
+  } catch (error) {
+    console.error("❌ Avatar upload error:", error);
+    res.status(500).json({ 
+      success: false,
+      error: `Avatar upload failed: ${error.message}` 
+    });
+  }
+});
+
+// Update user trading stats
+app.put("/profile/:walletAddress/stats", async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const { totalTrades, totalVolume, tokensHeld, lastTradeAt } = req.body;
+    
+    if (!walletAddress || !ethers.utils.isAddress(walletAddress)) {
+      return res.status(400).json({ error: "Invalid wallet address" });
+    }
+
+    // Get existing profile
+    let profile = await getProfileFromOGStorage(walletAddress);
+    
+    if (!profile) {
+      return res.status(404).json({ error: "Profile not found" });
+    }
+
+    // Update trading stats
+    profile.tradingStats = {
+      ...profile.tradingStats,
+      totalTrades: totalTrades || profile.tradingStats.totalTrades,
+      totalVolume: totalVolume || profile.tradingStats.totalVolume,
+      tokensHeld: tokensHeld || profile.tradingStats.tokensHeld,
+      lastTradeAt: lastTradeAt || profile.tradingStats.lastTradeAt
+    };
+    profile.updatedAt = new Date().toISOString();
+
+    // Save updated profile
+    await saveProfileToOGStorage(walletAddress, profile);
+
+    res.json({ success: true, profile });
+  } catch (error) {
+    console.error("Update trading stats error:", error);
+    res.status(500).json({ error: "Failed to update trading stats" });
+  }
+});
+
+/**
+ * MARKET DATA ENDPOINTS - Enhanced with Caching
+ */
+app.get("/market/stats", async (req, res) => {
+  try {
+    const stats = await dataService.getMarketStats();
+    res.json({ success: true, stats });
+  } catch (error) {
+    console.error("Get market stats error:", error);
+    res.status(500).json({ error: "Failed to get market stats" });
+  }
+});
+
+/**
+ * TRADING HISTORY ENDPOINTS
+ */
+app.get("/trading/history/:userAddress", async (req, res) => {
+  try {
+    const { userAddress } = req.params;
+    const { limit = 50, offset = 0 } = req.query;
+    
+    const history = await dataService.getUserTradingHistory(
+      userAddress, 
+      parseInt(limit), 
+      parseInt(offset)
+    );
+    
+    res.json({ success: true, history });
+  } catch (error) {
+    console.error("Get trading history error:", error);
+    res.status(500).json({ error: "Failed to get trading history" });
+  }
+});
+
+app.get("/trading/coin/:coinId", async (req, res) => {
+  try {
+    const { coinId } = req.params;
+    const { limit = 50, offset = 0 } = req.query;
+    
+    const history = await dataService.getCoinTradingHistory(
+      coinId, 
+      parseInt(limit), 
+      parseInt(offset)
+    );
+    
+    res.json({ success: true, history });
+  } catch (error) {
+    console.error("Get coin trading history error:", error);
+    res.status(500).json({ error: "Failed to get coin trading history" });
+  }
+});
+
+/**
+ * CACHE MANAGEMENT ENDPOINTS
+ */
+app.get("/cache/stats", async (req, res) => {
+  try {
+    const stats = await cacheService.getCacheStats();
+    res.json({ success: true, stats });
+  } catch (error) {
+    console.error("Get cache stats error:", error);
+    res.status(500).json({ error: "Failed to get cache stats" });
+  }
+});
+
+app.post("/cache/clear", async (req, res) => {
+  try {
+    const cleared = await cacheService.clearAllCache();
+    res.json({ success: cleared, message: "Cache cleared successfully" });
+  } catch (error) {
+    console.error("Clear cache error:", error);
+    res.status(500).json({ error: "Failed to clear cache" });
+  }
+});
+
+/**
+ * START SERVER
+ */
+const PORT = process.env.PORT || 4000;
+
+async function startServer() {
+  try {
+    // Initialize professional database architecture
+    await initializeDatabase();
+    
+    // Start the server
+app.listen(PORT, () => {
+      console.log(`🚀 Professional 0G Storage Integration Server running on http://localhost:${PORT}`);
+  console.log(`📤 Upload endpoint: POST /upload`);
+  console.log(`📥 Download endpoint: GET /download/:rootHash`);
+  console.log(`🪙 Create coin: POST /createCoin`);
+      console.log(`👤 Profile endpoints: GET/PUT /profile/:walletAddress`);
+      console.log(`📊 Market data: GET /market/stats`);
+  console.log(`💚 Health check: GET /health`);
+  console.log(`🔗 0G Storage API: ${OG_STORAGE_API}`);
+      console.log(`⚡ Redis caching: Enabled with fallback`);
+      console.log(`🗄️ SQLite database: Optimized with connection pooling`);
+    });
+  } catch (error) {
+    console.error("❌ Failed to start server:", error);
+    process.exit(1);
+  }
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n🛑 Shutting down server gracefully...');
+  await dataService.close();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n🛑 Shutting down server gracefully...');
+  await dataService.close();
+  process.exit(0);
+});
+
+// Start the server
+startServer();

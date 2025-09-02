@@ -8,12 +8,23 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import TokenCreatorModal from './components/TokenCreatorModal'
-import CoinDetailModal from './components/CoinDetailModal'
+// Removed CoinDetailModal import - no card clicks wanted
 import CoinImage from './components/CoinImage'
-import TradingCard from './components/TradingCard'
+import EnhancedTradingCard from './components/EnhancedTradingCard'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useAccount } from 'wagmi'
 import { CoinData, ogStorageSDK } from '../lib/0gStorageSDK'
+
+// Extended interface for coins with additional properties from backend
+interface ExtendedCoinData extends CoinData {
+  tokenAddress?: string
+  curveAddress?: string // Add curve address for trading
+  txHash?: string
+  telegramUrl?: string
+  xUrl?: string
+  discordUrl?: string
+  websiteUrl?: string
+}
 import Link from 'next/link'
 import {
   Home,
@@ -50,14 +61,13 @@ const categories = [
 export default function App() {
   const { isConnected, address } = useAccount()
   const [isTokenModalOpen, setIsTokenModalOpen] = useState(false)
-  const [trendingCoins, setTrendingCoins] = useState<CoinData[]>([])
-  const [allCoins, setAllCoins] = useState<CoinData[]>([]) // Store all coins for search
+  const [trendingCoins, setTrendingCoins] = useState<ExtendedCoinData[]>([])
+  const [allCoins, setAllCoins] = useState<ExtendedCoinData[]>([]) // Store all coins for search
   const [searchQuery, setSearchQuery] = useState('') // Search query state
   const [isLoading, setIsLoading] = useState(false) // Start with false since we don't have initial data
   const [mounted, setMounted] = useState(false)
-  const [selectedCoin, setSelectedCoin] = useState<CoinData | null>(null)
   const [logoFailed, setLogoFailed] = useState(false)
-  const [isCoinDetailOpen, setIsCoinDetailOpen] = useState(false)
+  // Removed selectedCoin and isCoinDetailOpen - no card clicks wanted
 
   useEffect(() => {
     setMounted(true)
@@ -75,13 +85,15 @@ export default function App() {
         
         if (storedCoins.length > 0) {
           console.log('Found stored coins:', storedCoins);
-          setAllCoins(storedCoins); // Store all coins for search
-          setTrendingCoins(storedCoins); // Show ALL coins, not just first 6
+          const sorted = [...storedCoins].sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          setAllCoins(sorted); // Store all coins for search
+          setTrendingCoins(sorted); // Show ALL coins, not just first 6
         } else {
           console.log('No stored coins found in 0G Storage');
-          // Fallback to server database so tokens persist across browsers
+          // Load from backend server (multi-wallet support)
           try {
-            const res = await fetch('/api/coins', { cache: 'no-store' });
+            const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
+            const res = await fetch(`${backendBase}/coins`, { cache: 'no-store' });
             if (res.ok) {
               const data = await res.json();
               const mapped = (data.coins || []).map((c: any) => ({
@@ -90,17 +102,23 @@ export default function App() {
                 symbol: c.symbol,
                 supply: c.supply,
                 description: c.description,
-                imageUrl: c.imageHash ? ogStorageSDK.getCoinImageUrl(c.imageHash) : '',
+                imageUrl: c.imageUrl || (c.imageHash ? `${backendBase}/download/${c.imageHash}` : ''),
                 createdAt: new Date(c.createdAt).toISOString(),
                 creator: c.creator,
                 txHash: c.txHash,
                 tokenAddress: c.tokenAddress,
-              })) as any[];
-              setAllCoins(mapped);
-              setTrendingCoins(mapped);
+                curveAddress: c.curveAddress, // Add curve address
+                telegramUrl: c.telegramUrl,
+                xUrl: c.xUrl,
+                discordUrl: c.discordUrl,
+                websiteUrl: c.websiteUrl,
+              })) as ExtendedCoinData[];
+              const sorted = [...mapped].sort((a,b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime())
+              setAllCoins(sorted);
+              setTrendingCoins(sorted);
             }
           } catch (e) {
-            console.error('Failed to load coins from server database:', e);
+            console.error('Failed to load coins from backend server:', e);
           }
         }
       } catch (error) {
@@ -131,39 +149,6 @@ export default function App() {
     }
   }, [searchQuery, allCoins]);
 
-  // Auto-refresh coins every 30 seconds to see new tokens from other users
-  useEffect(() => {
-    if (!mounted) return;
-
-    const autoRefreshInterval = setInterval(async () => {
-      try {
-        console.log('Auto-refreshing coins from server database...');
-        const res = await fetch('/api/coins', { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          const mapped = (data.coins || []).map((c: any) => ({
-            id: c.txHash || c.id,
-            name: c.name,
-            symbol: c.symbol,
-            supply: c.supply,
-            description: c.description,
-            imageUrl: c.imageHash ? ogStorageSDK.getCoinImageUrl(c.imageHash) : '',
-            createdAt: new Date(c.createdAt).toISOString(),
-            creator: c.creator,
-            txHash: c.txHash,
-            tokenAddress: c.tokenAddress,
-          })) as any[];
-          setAllCoins(mapped); // Update allCoins with refreshed data
-          setTrendingCoins(mapped); // Show ALL refreshed coins
-        }
-      } catch (error) {
-        console.error('Auto-refresh failed:', error);
-      }
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(autoRefreshInterval);
-  }, [mounted]);
-
   // Note: 0G Storage is primarily for storing data, not querying it
   // To display coins, we need additional infrastructure like:
   // 1. A separate database/index to track stored coins
@@ -191,14 +176,10 @@ export default function App() {
     return 'Just now'
   }
 
-  // Handle coin card click
-  const handleCoinClick = (coin: CoinData) => {
-    setSelectedCoin(coin)
-    setIsCoinDetailOpen(true)
-  }
+  // Handle coin card click - REMOVED - no card clicks wanted
 
   // Handle trading actions
-  const handleTrade = async (coin: CoinData, action: 'buy' | 'sell', amount: string) => {
+  const handleTrade = async (coin: ExtendedCoinData, action: 'buy' | 'sell', amount: string) => {
     console.log(`Trade executed: ${action} ${amount} of ${coin.symbol}`)
     
     // TODO: In production, this would:
@@ -213,7 +194,7 @@ export default function App() {
 
   const handleCoinCreated = async (tokenData: any) => {
     try {
-      const coin = {
+      const coin: ExtendedCoinData = {
         id: tokenData.txHash,
         name: tokenData.name,
         symbol: tokenData.symbol,
@@ -225,6 +206,7 @@ export default function App() {
         // pass-through chain fields for explorer buttons
         txHash: tokenData.txHash,
         tokenAddress: tokenData.tokenAddress,
+        curveAddress: tokenData.curveAddress, // Add curve address for trading
         telegramUrl: tokenData.telegramUrl,
         xUrl: tokenData.xUrl,
         discordUrl: tokenData.discordUrl,
@@ -234,9 +216,10 @@ export default function App() {
       setAllCoins((prev) => [coin, ...prev])
       setTrendingCoins((prev) => [coin, ...prev])
 
-      // Persist to server database so the coin appears across browsers/devices
+      // Persist to backend server so the coin appears across browsers/devices
       try {
-        await fetch('/api/coins', {
+        const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
+        await fetch(`${backendBase}/createCoin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -245,6 +228,7 @@ export default function App() {
             supply: tokenData.supply,
             imageHash: tokenData.imageHash || null,
             tokenAddress: tokenData.tokenAddress || null,
+            curveAddress: tokenData.curveAddress || null, // Add curve address
             txHash: tokenData.txHash,
             creator: address || 'Unknown',
             description: tokenData.description,
@@ -255,7 +239,7 @@ export default function App() {
           }),
         })
       } catch (e) {
-        console.error('Failed to persist coin to server DB:', e)
+        console.error('Failed to persist coin to backend server:', e)
       }
     } catch (e) {
       console.error('Failed to add coin locally:', e)
@@ -291,10 +275,7 @@ export default function App() {
             <Home className="w-5 h-5" />
             <span>Home</span>
           </a>
-          <Link href="/bonding-curve" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
-            <TrendingDown className="w-5 h-5" />
-            <span>Bonding Curve</span>
-          </Link>
+
           <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <Video className="w-5 h-5" />
             <span>Livestreams</span>
@@ -307,10 +288,10 @@ export default function App() {
             <MessageCircle className="w-5 h-5" />
             <span>Chat</span>
           </a>
-          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
+          <Link href="/profile" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <User className="w-5 h-5" />
             <span>Profile</span>
-          </a>
+          </Link>
           <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <HelpCircle className="w-5 h-5" />
             <span>Support</span>
@@ -386,7 +367,7 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <Button onClick={() => setSearchQuery('')}>
+              <Button onClick={() => setSearchQuery('')} className="shadow-[6px_6px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000]">
                 {searchQuery ? 'Clear Search' : 'Search'}
               </Button>
               {mounted && <ConnectButton />}
@@ -428,7 +409,7 @@ export default function App() {
               <div className="bg-slate-800/40 backdrop-blur-xl rounded-2xl p-6 border border-slate-700/50">
                 <div className="text-center py-6">
                   <div className="w-16 h-16 bg-slate-700/60 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <TrendingUp className="w-8 h-8 text-slate-400" />
+                    <TrendingUp className="w-8 h-8 text-green-400" />
                   </div>
                   <h4 className="text-lg font-semibold text-slate-300 mb-2">Ready to Trade!</h4>
                   <p className="text-slate-400 mb-4">
@@ -457,7 +438,8 @@ export default function App() {
                   onClick={async () => {
                     setIsLoading(true);
                     try {
-                      const res = await fetch('/api/coins', { cache: 'no-store' });
+                      const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
+                      const res = await fetch(`${backendBase}/coins`, { cache: 'no-store' });
                       if (res.ok) {
                         const data = await res.json();
                         const mapped = (data.coins || []).map((c: any) => ({
@@ -466,14 +448,19 @@ export default function App() {
                           symbol: c.symbol,
                           supply: c.supply,
                           description: c.description,
-                          imageUrl: c.imageHash ? ogStorageSDK.getCoinImageUrl(c.imageHash) : '',
+                          imageUrl: c.imageUrl || (c.imageHash ? `${backendBase}/download/${c.imageHash}` : ''),
                           createdAt: new Date(c.createdAt).toISOString(),
                           creator: c.creator,
                           txHash: c.txHash,
                           tokenAddress: c.tokenAddress,
-                        })) as any[];
-                        setAllCoins(mapped); // Update allCoins with refreshed data
-                        setTrendingCoins(mapped); // Show ALL refreshed coins
+                          telegramUrl: c.telegramUrl,
+                          xUrl: c.xUrl,
+                          discordUrl: c.discordUrl,
+                          websiteUrl: c.websiteUrl,
+                        })) as ExtendedCoinData[];
+                        const sorted = [...mapped].sort((a,b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime())
+                        setAllCoins(sorted); // Update allCoins with refreshed data
+                        setTrendingCoins(sorted); // Show ALL refreshed coins
                       }
                     } catch (e) {
                       console.error('Manual refresh failed:', e)
@@ -481,20 +468,20 @@ export default function App() {
                     setIsLoading(false);
                   }}
                   variant="secondary"
-                  className="bg-slate-700/60 backdrop-blur-sm hover:bg-slate-600/60 rounded-2xl px-4 py-2 border border-slate-600/30 transition-all duration-300"
+                  className="bg-white-700/60 backdrop-blur-sm hover:bg-slate-600/60 rounded-2xl px-4 py-2 border border-slate-600/30 transition-all duration-300"
                 >
-                  <TrendingUp className="w-4 h-4 mr-2" />
+                  <TrendingUp className="w-4 h-4 mr-2 text-green " />
                   Refresh
                 </Button>
                 <Button
                   variant="secondary"
-                  className="bg-slate-700/60 backdrop-blur-sm hover:bg-slate-600/60 rounded-2xl w-10 h-10 p-0 border border-slate-600/30 transition-all duration-300"
+                  className="bg-white-70/60 backdrop-blur-sm  hover:bg-slate-600/60 rounded-2xl w-10 h-10 p-0 border border-slate-600/30 transition-all duration-300 shadow-[6px_6px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000]"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </Button>
                 <Button
                   variant="secondary"
-                  className="bg-slate-700/60 backdrop-blur-sm hover:bg-slate-600/60 rounded-2xl w-10 h-10 p-0 border border-slate-600/30 transition-all duration-300"
+                  className="bg-white-70/60 backdrop-blur-sm  hover:bg-slate-600/60 rounded-2xl w-10 h-10 p-0 border border-slate-600/30 transition-all duration-300 shadow-[6px_6px_0_#000] active:translate-x-[3px] active:translate-y-[3px] active:shadow-[3px_3px_0_#000]"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </Button>
@@ -569,10 +556,19 @@ export default function App() {
                     key={coin.id}
                     whileHover={{ scale: 1.02, y: -4 }}
                     transition={{ duration: 0.3 }}
-                    onClick={() => handleCoinClick(coin)}
-                    className="bg-slate-800/40 backdrop-blur-xl rounded-3xl p-6 border border-slate-700/50 cursor-pointer shadow-xl shadow-slate-900/20 hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-300"
+                    className="bg-sky-100 text-slate-900 rounded-2xl p-6 border-4 border-black shadow-[6px_6px_0_#000] hover:shadow-[8px_8px_0_#000] transition-transform duration-200 hover:-translate-x-1 hover:-translate-y-1"
                   >
-                    <TradingCard coin={coin} onTrade={handleTrade} />
+                    <EnhancedTradingCard 
+                      tokenAddress={coin.tokenAddress || ''}
+                      tokenName={coin.name}
+                      tokenSymbol={coin.symbol}
+                      description={coin.description || ''}
+                      imageUrl={coin.imageUrl}
+                      metadataUrl={coin.imageUrl}
+                      creator={coin.creator}
+                      createdAt={coin.createdAt}
+                      curveAddress={coin.curveAddress || undefined}
+                    />
                   </motion.div>
                 ))
               )}
@@ -590,12 +586,7 @@ export default function App() {
         onTokenCreated={handleCoinCreated}
       />
 
-      {/* Coin Detail Modal */}
-      <CoinDetailModal
-        isOpen={isCoinDetailOpen}
-        onClose={() => setIsCoinDetailOpen(false)}
-        coin={selectedCoin}
-      />
+      {/* Coin Detail Modal removed - no card clicks */}
     </div>
   )
 }

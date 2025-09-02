@@ -1,266 +1,314 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useAccount, useContractRead, useContractWrite, useWaitForTransaction, useProvider } from 'wagmi';
-import { ethers } from 'ethers';
+import { useState, useEffect, useCallback } from 'react'
+import { ethers } from 'ethers'
+import { bondingCurveTradingService, CurveInfo, TradingQuote, TradingResult } from './bondingCurveTradingService'
 
-// Bonding Curve ABI (minimal for hooks)
-const BONDING_CURVE_ABI = [
-  'function getCurrentStep() external view returns (uint256)',
-  'function getCurrentPrice() external view returns (uint256)',
-  'function quoteBuy(uint256 qty) external view returns (uint256 totalCost)',
-  'function quoteSell(uint256 qty) external view returns (uint256 ogReceived)',
-  'function buy(uint256 qty, uint256 maxCost) external payable',
-  'function sell(uint256 qty, uint256 minReturn) external',
-  'function getCurveStats() external view returns (uint256 currentStep, uint256 currentPrice, uint256 tokensSold, uint256 nativeReserveAmount, bool isGraduated, uint256 remainingTokens)',
-  'function graduated() external view returns (bool)',
-  'function token() external view returns (address)'
-];
-
-export interface CurveStats {
-  currentStep: number;
-  currentPrice: number;
-  tokensSold: number;
-  nativeReserve: number;
-  isGraduated: boolean;
-  remainingTokens: number;
-}
-
-export interface BuyQuote {
-  tokenAmount: number;
-  totalCost: number;
-  currentStep: number;
-  currentPrice: number;
-}
-
-export interface SellQuote {
-  ogReceived: number;
-  currentStep: number;
-  currentPrice: number;
-}
-
-export function useBondingCurve(curveAddress: string) {
-  const { address } = useAccount();
-  const provider = useProvider();
-  
+export interface UseBondingCurveReturn {
   // State
-  const [curveStats, setCurveStats] = useState<CurveStats | null>(null);
-  const [buyQuote, setBuyQuote] = useState<BuyQuote | null>(null);
-  const [sellQuote, setSellQuote] = useState<SellQuote | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  curveInfo: CurveInfo | null
+  isLoading: boolean
+  error: string | null
+  
+  // Trading state
+  buyQuote: TradingQuote | null
+  sellQuote: TradingQuote | null
+  isTrading: boolean
+  lastTrade: TradingResult | null
+  
+  // Actions
+  refreshCurveInfo: () => Promise<void>
+  getBuyQuote: (tokenAmount: string) => Promise<void>
+  getSellQuote: (tokenAmount: string) => Promise<void>
+  buyTokens: (tokenAmount: string, maxCost: string, slippageTolerance?: number) => Promise<TradingResult>
+  sellTokens: (tokenAmount: string, minReturn: string, slippageTolerance?: number) => Promise<TradingResult>
+  
+  // Utilities
+  getTokenBalance: (tokenAddress: string, userAddress: string) => Promise<string>
+  getNativeBalance: (userAddress: string) => Promise<string>
+  
+  // Event listening
+  startListening: () => void
+  stopListening: () => void
+}
 
-  // Contract reads
-  const { data: currentStep } = useContractRead({
-    address: curveAddress as `0x${string}`,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'getCurrentStep',
-    watch: true,
-  });
-
-  const { data: currentPrice } = useContractRead({
-    address: curveAddress as `0x${string}`,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'getCurrentPrice',
-    watch: true,
-  });
-
-  const { data: isGraduated } = useContractRead({
-    address: curveAddress as `0x${string}`,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'graduated',
-    watch: true,
-  });
-
-  const { data: tokenAddress } = useContractRead({
-    address: curveAddress as `0x${string}`,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'token',
-  });
-
-  // Contract writes
-  const { write: buy, data: buyTx } = useContractWrite({
-    address: curveAddress as `0x${string}`,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'buy',
-  });
-
-  const { write: sell, data: sellTx } = useContractWrite({
-    address: curveAddress as `0x${string}`,
-    abi: BONDING_CURVE_ABI,
-    functionName: 'sell',
-  });
-
-  // Transaction status
-  const { isLoading: buyLoading, isSuccess: buySuccess } = useWaitForTransaction({
-    hash: buyTx?.hash,
-  });
-
-  const { isLoading: sellLoading, isSuccess: sellSuccess } = useWaitForTransaction({
-    hash: sellTx?.hash,
-  });
-
-  // Load curve stats
-  const loadCurveStats = useCallback(async () => {
-    if (!curveAddress || !provider) return;
+export function useBondingCurve(
+  curveAddress: string | null,
+  provider: ethers.providers.Web3Provider | null
+): UseBondingCurveReturn {
+  // State
+  const [curveInfo, setCurveInfo] = useState<CurveInfo | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Trading state
+  const [buyQuote, setBuyQuote] = useState<TradingQuote | null>(null)
+  const [sellQuote, setSellQuote] = useState<TradingQuote | null>(null)
+  const [isTrading, setIsTrading] = useState(false)
+  const [lastTrade, setLastTrade] = useState<TradingResult | null>(null)
+  
+  // Initialize service when provider changes
+  useEffect(() => {
+    if (provider) {
+      bondingCurveTradingService.initialize(provider)
+    }
+  }, [provider])
+  
+  // Refresh curve info
+  const refreshCurveInfo = useCallback(async () => {
+    if (!curveAddress || !provider) {
+      setError('No curve address or provider')
+      return
+    }
+    
+    setIsLoading(true)
+    setError(null)
     
     try {
-      setLoading(true);
-      const contract = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, provider);
-      const stats = await contract.getCurveStats();
-      
-      setCurveStats({
-        currentStep: stats.currentStep.toNumber(),
-        currentPrice: parseFloat(ethers.utils.formatEther(stats.currentPrice)),
-        tokensSold: parseFloat(ethers.utils.formatEther(stats.tokensSold)),
-        nativeReserve: parseFloat(ethers.utils.formatEther(stats.nativeReserveAmount)),
-        isGraduated: stats.isGraduated,
-        remainingTokens: parseFloat(ethers.utils.formatEther(stats.remainingTokens))
-      });
-    } catch (err) {
-      console.error('Error loading curve stats:', err);
-      setError('Failed to load curve stats');
+      const info = await bondingCurveTradingService.getCurveInfo(curveAddress)
+      if (info) {
+        setCurveInfo(info)
+      } else {
+        setError('Failed to get curve info')
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to refresh curve info')
     } finally {
-      setLoading(false);
+      setIsLoading(false)
     }
-  }, [curveAddress, provider]);
+  }, [curveAddress, provider])
 
   // Get buy quote
-  const getBuyQuote = useCallback(async (tokenQty: string) => {
-    if (!curveAddress || !provider || !tokenQty || parseFloat(tokenQty) <= 0) {
-      setBuyQuote(null);
-      return;
+  const getBuyQuote = useCallback(async (tokenAmount: string) => {
+    if (!curveAddress || !provider) {
+      setError('No curve address or provider')
+      return
     }
     
     try {
-      setLoading(true);
-      const contract = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, provider);
-      const tokenQtyWei = ethers.utils.parseEther(tokenQty);
-      
-      const totalCost = await contract.quoteBuy(tokenQtyWei);
-      const step = await contract.getCurrentStep();
-      const price = await contract.getCurrentPrice();
-      
-      setBuyQuote({
-        tokenAmount: parseFloat(tokenQty),
-        totalCost: parseFloat(ethers.utils.formatEther(totalCost)),
-        currentStep: step.toNumber(),
-        currentPrice: parseFloat(ethers.utils.formatEther(price))
-      });
-    } catch (err) {
-      console.error('Error getting buy quote:', err);
-      setError('Failed to get buy quote');
-      setBuyQuote(null);
-    } finally {
-      setLoading(false);
+      const quote = await bondingCurveTradingService.getBuyQuote(curveAddress, tokenAmount)
+      setBuyQuote(quote)
+      setError(null)
+    } catch (err: any) {
+      setError(err.message || 'Failed to get buy quote')
+      setBuyQuote(null)
     }
-  }, [curveAddress, provider]);
+  }, [curveAddress, provider])
 
   // Get sell quote
-  const getSellQuote = useCallback(async (tokenQty: string) => {
-    if (!curveAddress || !provider || !tokenQty || parseFloat(tokenQty) <= 0) {
-      setSellQuote(null);
-      return;
+  const getSellQuote = useCallback(async (tokenAmount: string) => {
+    if (!curveAddress || !provider) {
+      setError('No curve address or provider')
+      return
     }
     
     try {
-      setLoading(true);
-      const contract = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, provider);
-      const tokenQtyWei = ethers.utils.parseEther(tokenQty);
+      const quote = await bondingCurveTradingService.getSellQuote(curveAddress, tokenAmount)
+      setSellQuote(quote)
+      setError(null)
+    } catch (err: any) {
+      setError(err.message || 'Failed to get sell quote')
+      setSellQuote(null)
+    }
+  }, [curveAddress, provider])
+  
+  // Buy tokens
+  const buyTokens = useCallback(async (
+    tokenAmount: string,
+    maxCost: string,
+    slippageTolerance: number = 0.05
+  ): Promise<TradingResult> => {
+    if (!curveAddress || !provider) {
+      const error = 'No curve address or provider'
+      setError(error)
+      return { success: false, error }
+    }
+    
+    setIsTrading(true)
+    setError(null)
+    
+    try {
+      const result = await bondingCurveTradingService.buyTokens(
+        curveAddress,
+        tokenAmount,
+        maxCost,
+        slippageTolerance
+      )
       
-      const ogReceived = await contract.quoteSell(tokenQtyWei);
-      const step = await contract.getCurrentStep();
-      const price = await contract.getCurrentPrice();
+      if (result.success) {
+        setLastTrade(result)
+        // Refresh curve info after successful trade
+        await refreshCurveInfo()
+      } else {
+        setError(result.error || 'Buy transaction failed')
+      }
       
-      setSellQuote({
-        ogReceived: parseFloat(ethers.utils.formatEther(ogReceived)),
-        currentStep: step.toNumber(),
-        currentPrice: parseFloat(ethers.utils.formatEther(price))
-      });
-    } catch (err) {
-      console.error('Error getting sell quote:', err);
-      setError('Failed to get sell quote');
-      setSellQuote(null);
+      return result
+    } catch (err: any) {
+      const error = err.message || 'Buy transaction failed'
+      setError(error)
+      return { success: false, error }
     } finally {
-      setLoading(false);
+      setIsTrading(false)
     }
-  }, [curveAddress, provider]);
-
-  // Execute buy
-  const executeBuy = useCallback(async (tokenQty: string, maxCost: number) => {
-    if (!buy || !tokenQty || parseFloat(tokenQty) <= 0) return;
+  }, [curveAddress, provider, refreshCurveInfo])
+  
+  // Sell tokens
+  const sellTokens = useCallback(async (
+    tokenAmount: string,
+    minReturn: string,
+    slippageTolerance: number = 0.05
+  ): Promise<TradingResult> => {
+    if (!curveAddress || !provider) {
+      const error = 'No curve address or provider'
+      setError(error)
+      return { success: false, error }
+    }
+    
+    setIsTrading(true)
+    setError(null)
     
     try {
-      const tokenQtyWei = ethers.utils.parseEther(tokenQty);
-      const maxCostWei = ethers.utils.parseEther(maxCost.toString());
+      const result = await bondingCurveTradingService.sellTokens(
+        curveAddress,
+        tokenAmount,
+        minReturn,
+        slippageTolerance
+      )
       
-      buy({
-        args: [tokenQtyWei, maxCostWei],
-        value: maxCostWei,
-      });
-    } catch (err) {
-      console.error('Error executing buy:', err);
-      setError('Failed to execute buy');
+      if (result.success) {
+        setLastTrade(result)
+        // Refresh curve info after successful trade
+        await refreshCurveInfo()
+      } else {
+        setError(result.error || 'Sell transaction failed')
+      }
+      
+      return result
+    } catch (err: any) {
+      const error = err.message || 'Sell transaction failed'
+      setError(error)
+      return { success: false, error }
+    } finally {
+      setIsTrading(false)
     }
-  }, [buy]);
-
-  // Execute sell
-  const executeSell = useCallback(async (tokenQty: string, minReturn: number) => {
-    if (!sell || !tokenQty || parseFloat(tokenQty) <= 0) return;
+  }, [curveAddress, provider, refreshCurveInfo])
+  
+  // Get token balance
+  const getTokenBalance = useCallback(async (tokenAddress: string, userAddress: string): Promise<string> => {
+    if (!provider) {
+      throw new Error('No provider')
+    }
     
-    try {
-      const tokenQtyWei = ethers.utils.parseEther(tokenQty);
-      const minReturnWei = ethers.utils.parseEther(minReturn.toString());
-      
-      sell({
-        args: [tokenQtyWei, minReturnWei],
-      });
-    } catch (err) {
-      console.error('Error executing sell:', err);
-      setError('Failed to execute sell');
+    return await bondingCurveTradingService.getTokenBalance(tokenAddress, userAddress)
+  }, [provider])
+  
+  // Get native balance
+  const getNativeBalance = useCallback(async (userAddress: string): Promise<string> => {
+    if (!provider) {
+      throw new Error('No provider')
     }
-  }, [sell]);
-
-  // Load stats on mount and when dependencies change
-  useEffect(() => {
-    loadCurveStats();
-  }, [loadCurveStats]);
-
-  // Clear error when successful
-  useEffect(() => {
-    if (buySuccess || sellSuccess) {
-      setError(null);
-      // Reload stats after successful transaction
-      loadCurveStats();
+    
+    return await bondingCurveTradingService.getNativeBalance(userAddress)
+  }, [provider])
+  
+  // Start listening for events
+  const startListening = useCallback(() => {
+    if (!curveAddress || !provider) {
+      return
     }
-  }, [buySuccess, sellSuccess, loadCurveStats]);
+    
+    bondingCurveTradingService.listenForCurveEvents(curveAddress, {
+      onBuy: (buyer: string, ogIn: string, tokensOut: string, price: string) => {
+        console.log(`🟢 Buy: ${buyer} bought ${tokensOut} tokens for ${ogIn} 0G at ${price} 0G/token`)
+        // Refresh curve info when trades happen
+        refreshCurveInfo()
+      },
+      onSell: (seller: string, tokensIn: string, ogOut: string, price: string) => {
+        console.log(`🔴 Sell: ${seller} sold ${tokensIn} tokens for ${ogOut} 0G at ${price} 0G/token`)
+        // Refresh curve info when trades happen
+        refreshCurveInfo()
+      },
+      onPriceUpdate: (price: string, supply: string, ogReserve: string) => {
+        console.log(`📊 Price update: ${price} 0G/token, Supply: ${supply}, Reserve: ${ogReserve} 0G`)
+        // Update local state
+        if (curveInfo) {
+          setCurveInfo(prev => prev ? {
+            ...prev,
+            currentPrice: price,
+            tokensSold: supply,
+            nativeReserve: ogReserve
+          } : null)
+        }
+      },
+      onStepAdvance: (step: number, price: string) => {
+        console.log(`📈 Step advanced: Step ${step}, Price: ${price} 0G/token`)
+        // Update local state
+        if (curveInfo) {
+          setCurveInfo(prev => prev ? {
+            ...prev,
+            currentStep: step,
+            currentPrice: price
+          } : null)
+        }
+      },
+      onGraduation: (tokensSold: string, ogReserve: string, timestamp: number) => {
+        console.log(`🎓 Curve graduated: ${tokensSold} tokens sold, ${ogReserve} 0G reserve`)
+        // Update local state
+        if (curveInfo) {
+          setCurveInfo(prev => prev ? {
+            ...prev,
+            isGraduated: true
+          } : null)
+        }
+      }
+    })
+  }, [curveAddress, provider, curveInfo, refreshCurveInfo])
+  
+  // Stop listening for events
+  const stopListening = useCallback(() => {
+    if (curveAddress) {
+      bondingCurveTradingService.stopListening(curveAddress)
+    }
+  }, [curveAddress])
+  
+  // Auto-refresh curve info when address changes
+  useEffect(() => {
+    if (curveAddress && provider) {
+      refreshCurveInfo()
+    }
+  }, [curveAddress, provider, refreshCurveInfo])
+  
+  // Cleanup event listeners on unmount
+  useEffect(() => {
+    return () => {
+      stopListening()
+    }
+  }, [stopListening])
 
   return {
     // State
-    curveStats,
+    curveInfo,
+    isLoading,
+    error,
+    
+    // Trading state
     buyQuote,
     sellQuote,
-    error,
-    loading,
-    isGraduated,
-    tokenAddress,
+    isTrading,
+    lastTrade,
     
     // Actions
+    refreshCurveInfo,
     getBuyQuote,
     getSellQuote,
-    executeBuy,
-    executeSell,
-    loadCurveStats,
+    buyTokens,
+    sellTokens,
     
-    // Transaction status
-    buyLoading,
-    buySuccess,
-    sellLoading,
-    sellSuccess,
+    // Utilities
+    getTokenBalance,
+    getNativeBalance,
     
-    // Clear error
-    clearError: () => setError(null),
-  };
+    // Event listening
+    startListening,
+    stopListening
+  }
 }
-
-
-
-

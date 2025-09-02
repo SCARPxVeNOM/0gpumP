@@ -95,7 +95,6 @@ async function findTokensFromStorage() {
     console.log("\n5️⃣ Checking deployment records...");
     const deploymentFiles = [
       'deployment-config.json',
-      'bonding-curve-deployment.json',
       'deployments/ogtoken-0g-testnet.json'
     ];
     

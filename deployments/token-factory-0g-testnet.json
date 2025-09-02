@@ -1,0 +1,8 @@
+{
+  "network": "0g-testnet",
+  "tokenFactory": "0xC5410Bf4F2B8f1eEf3425bCcE7B82DAA03eF7a74",
+  "owner": "0x2dC274ABC0df37647CEd9212e751524708a68996",
+  "feeRecipient": "0x2dC274ABC0df37647CEd9212e751524708a68996",
+  "deployedAt": "2025-08-30T11:02:11.997Z",
+  "deployer": "0x2dC274ABC0df37647CEd9212e751524708a68996"
+}

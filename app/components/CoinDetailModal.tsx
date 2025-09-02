@@ -36,7 +36,8 @@ export default function CoinDetailModal({ isOpen, onClose, coin }: CoinDetailMod
       if (!coin || tx) return
       if (!coin.tokenAddress || !coin.creator) return
       try {
-        const url = `http://localhost:4000/tokens/onchain?creator=${coin.creator}`
+        const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
+        const url = `${backendBase}/tokens/onchain?creator=${coin.creator}`
         const resp = await fetch(url)
         if (!resp.ok) return
         const data = await resp.json()
