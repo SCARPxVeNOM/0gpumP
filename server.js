@@ -7,7 +7,7 @@ import FormData from "form-data";
 import { ethers } from "ethers";
 import fs from "fs";
 import path from "path";
-import sharp from "sharp";
+
 import crypto from "crypto";
 
 // Professional Database Architecture
@@ -171,28 +171,8 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       let compressionType = 'none';
       
       try {
-        // For images, use aggressive WebP compression
-        if (file.mimetype.startsWith('image/')) {
-          console.log(`🖼️ Converting to WebP with aggressive compression...`);
-          const webpBuffer = await sharp(file.buffer)
-            .webp({ 
-              quality: 60,        // Aggressive quality reduction
-              effort: 6,          // Maximum compression effort
-              smartSubsample: true,
-              reductionEffort: 6
-            })
-            .toBuffer();
-          
-          if (webpBuffer.length < outputBuffer.length) {
-            const beforeWebp = outputBuffer.length;
-            outputBuffer = webpBuffer;
-            outName = outName.replace(/\.[^/.]+$/, '.webp');
-            outType = 'image/webp';
-            compressionRatio = webpBuffer.length / beforeWebp;
-            compressionType = 'webp';
-            console.log(`✅ WebP compression: ${beforeWebp}B → ${webpBuffer.length}B (${Math.round((1 - compressionRatio) * 100)}% reduction)`);
-          }
-        }
+        // Image compression removed for Render compatibility
+        // Using original file without WebP conversion
         
         // STEP 2: GZIP COMPRESSION - For all files
         if (outputBuffer.length > 1024) {
@@ -390,21 +370,8 @@ app.post("/createCoin", upload.single("image"), async (req, res) => {
       let outName = imageFile.originalname;
       let outType = imageFile.mimetype;
       
-      try {
-        // WebP compression
-        console.log(`🖼️ Converting coin image to WebP...`);
-        const webpBuffer = await sharp(imageFile.buffer)
-          .webp({ quality: 70, effort: 6 })
-          .toBuffer();
-        
-        if (webpBuffer.length < outputBuffer.length) {
-          outputBuffer = webpBuffer;
-          outName = outName.replace(/\.[^/.]+$/, '.webp');
-        outType = 'image/webp';
-        }
-      } catch (e) {
-        console.warn('Image compression failed, using original:', e?.message || e);
-      }
+      // WebP compression removed for Render compatibility
+      // Using original image without compression
       
       // Upload to 0G Storage
       const formData = new FormData();
@@ -905,28 +872,8 @@ async function compressFile(file) {
   let compressionType = 'none';
   
   try {
-    // For images, use aggressive WebP compression
-    if (file.mimetype.startsWith('image/')) {
-      console.log(`🖼️ Converting avatar to WebP with aggressive compression...`);
-      const webpBuffer = await sharp(file.buffer)
-        .webp({ 
-          quality: 60,        // Aggressive quality reduction
-          effort: 6,          // Maximum compression effort
-          smartSubsample: true,
-          reductionEffort: 6
-        })
-        .toBuffer();
-      
-      if (webpBuffer.length < file.buffer.length) {
-        const beforeWebp = file.buffer.length;
-        outputBuffer = webpBuffer;
-        outName = outName.replace(/\.[^/.]+$/, '.webp');
-        outType = 'image/webp';
-        compressionRatio = webpBuffer.length / beforeWebp;
-        compressionType = 'webp';
-        console.log(`✅ WebP compression: ${beforeWebp}B → ${webpBuffer.length}B (${Math.round((1 - compressionRatio) * 100)}% reduction)`);
-      }
-    }
+    // WebP compression removed for Render compatibility
+    // Using original image without compression
 
     // STEP 2: GZIP COMPRESSION - For all files
     if (outputBuffer.length > 1024) {
