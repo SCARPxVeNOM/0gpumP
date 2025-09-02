@@ -26,10 +26,21 @@ Backend (set in your Node host):
 - Expose port (default 3000) via your host
 - Note the public URL and set it as OG_STORAGE_API for the backend
 
+Fly.io (optional):
+- Install flyctl: https://fly.io/docs/hands-on/install-flyctl/
+- `cd 0g-storage-ts-starter-kit`
+- `fly launch --now --copy-config --config fly.toml`
+
 ## 3) Deploy the backend (server.js)
 - `npm i --legacy-peer-deps`
 - `node server.js`
 - Expose port 4000 and set the public URL as NEXT_PUBLIC_BACKEND_URL in Vercel
+
+Fly.io (optional):
+- Install flyctl
+- `fly launch --now --copy-config --config ../fly.backend.toml`
+- Set secrets:
+  - `fly secrets set FACTORY_ADDRESS=0x... ROUTER_ADDRESS=0x... DEPLOYER_PRIVATE_KEY=...`
 
 ## 4) Deploy the frontend (Vercel)
 - Connect your GitHub repo to Vercel
