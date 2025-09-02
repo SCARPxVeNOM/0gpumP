@@ -27,6 +27,11 @@ Backend (set in your Node host):
 - Note the public URL and set it as OG_STORAGE_API for the backend
 
 Fly.io (optional):
+
+Render (free tier):
+- Connect your GitHub repo
+- Click New → Blueprint → select `render.yaml`
+- Render will create both services (storage and backend). Update envs/secrets in the dashboard as needed.
 - Install flyctl: https://fly.io/docs/hands-on/install-flyctl/
 - `cd 0g-storage-ts-starter-kit`
 - `fly launch --now --copy-config --config fly.toml`
@@ -37,6 +42,9 @@ Fly.io (optional):
 - Expose port 4000 and set the public URL as NEXT_PUBLIC_BACKEND_URL in Vercel
 
 Fly.io (optional):
+
+Render (free tier):
+- The `render.yaml` also defines the backend service. Set `FACTORY_ADDRESS`, `ROUTER_ADDRESS`, `DEPLOYER_PRIVATE_KEY` as environment variables in the Render service settings.
 - Install flyctl
 - `fly launch --now --copy-config --config ../fly.backend.toml`
 - Set secrets:
