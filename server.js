@@ -24,7 +24,10 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // 0G Storage API configuration
-const OG_STORAGE_API = "http://localhost:3000";
+let OG_STORAGE_API = process.env.OG_STORAGE_API || "http://localhost:3000";
+if (process.env.OG_STORAGE_HOST && process.env.OG_STORAGE_PORT) {
+  OG_STORAGE_API = `http://${process.env.OG_STORAGE_HOST}:${process.env.OG_STORAGE_PORT}`;
+}
 
 // Smart contract addresses and ABIs
 const FACTORY_ADDRESS = "0xC5410Bf4F2B8f1eEf3425bCcE7B82DAA03eF7a74";

@@ -25,8 +25,13 @@ services:
         value: https://evmrpc-testnet.0g.ai
       - key: SYNC_INTERVAL_MS
         value: 30000
-      - key: OG_STORAGE_API
+      - key: OG_STORAGE_HOST
         fromService:
           type: web
           name: 0g-storage-kit
-          property: url
+          property: host
+      - key: OG_STORAGE_PORT
+        fromService:
+          type: web
+          name: 0g-storage-kit
+          property: port
