@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: 0g-storage-kit
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm ci --legacy-peer-deps && npm run build
+    startCommand: node dist/index.js
+    envVars:
+      - key: PORT
+        value: 3000
+    rootDir: 0g-storage-ts-starter-kit
+
+  - type: web
+    name: 0gpump-backend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm ci --legacy-peer-deps
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: OG_RPC
+        value: https://evmrpc-testnet.0g.ai
+      - key: SYNC_INTERVAL_MS
+        value: 30000
+      - key: OG_STORAGE_API
+        fromService:
+          type: web
+          name: 0g-storage-kit
+          property: url
