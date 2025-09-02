@@ -171,7 +171,7 @@ const MAX_FILE_SIZE = 1024 * 1024; // 1MB
     
     // Try upload with retry logic
     try {
-      [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer);
+      [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer as any);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.log(`⚠️ First upload attempt failed: ${errorMessage}`);
@@ -179,7 +179,7 @@ const MAX_FILE_SIZE = 1024 * 1024; // 1MB
       // If first attempt fails, try one more time
       try {
         console.log(`🔄 Retrying upload...`);
-        [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer);
+        [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer as any);
       } catch (retryError) {
         const retryErrorMessage = retryError instanceof Error ? retryError.message : String(retryError);
         throw new Error(`Upload failed after retry: ${retryErrorMessage}`);
@@ -213,7 +213,7 @@ const MAX_FILE_SIZE = 1024 * 1024; // 1MB
          // Wait a bit before retry
          await new Promise(resolve => setTimeout(resolve, 5000));
          
-         const [retryTx, retryErr] = await indexer.upload(zgFile, RPC_URL, signer);
+         const [retryTx, retryErr] = await indexer.upload(zgFile, RPC_URL, signer as any);
          
          if (retryErr !== null) {
            throw new Error(`Upload error on retry: ${retryErr}`);
