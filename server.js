@@ -117,6 +117,11 @@ app.get("/health", async (req, res) => {
   }
 });
 
+// Render/Fly root check
+app.get('/', (_req, res) => {
+  res.send('0G Pump backend is running');
+});
+
 /**
  * UPLOAD ENDPOINT - Enhanced with Professional Architecture
  */
