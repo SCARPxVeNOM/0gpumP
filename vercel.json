@@ -20,10 +20,5 @@
     "NEXT_PUBLIC_BACKEND_URL": "https://zerogpump-backend.onrender.com",
     "NEXT_PUBLIC_FACTORY_ADDRESS": "0x8A1173808F4BF4A35EBb9e6BAFe91E96B2bCc93c",
     "NEXT_PUBLIC_OG_STORAGE_ENDPOINT": "https://zerog-storage-kit.onrender.com"
-  },
-  "functions": {
-    "app/api/**/*.ts": {
-      "maxDuration": 30
-    }
   }
 }
