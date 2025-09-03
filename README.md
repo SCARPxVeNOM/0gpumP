@@ -49,7 +49,7 @@ A **pump.fun-style** trading platform built on the **0G Chain** ecosystem, featu
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 18+ 
 - npm or yarn
 - MetaMask or compatible Web3 wallet
 - 0G Testnet tokens for gas fees
@@ -58,8 +58,8 @@ A **pump.fun-style** trading platform built on the **0G Chain** ecosystem, featu
 
 1. **Clone the repository**
 ```bash
-git clone <your-repo-url>
-cd 0gPump
+   git clone <your-repo-url>
+   cd 0gPump
 ```
 
 2. **Install dependencies**
@@ -78,7 +78,7 @@ NEXT_PUBLIC_FACTORY_ADDRESS=0x8A1173808F4BF4A35EBb9e6BAFe91E96B2bCc93c
 ```
 
 Create `.env` for backend:
-```env
+   ```env
 PORT=4000
 OG_STORAGE_API=http://localhost:3000
 OG_RPC=https://evmrpc-testnet.0g.ai
