@@ -24,7 +24,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // 0G Storage API configuration
-let OG_STORAGE_API = "https://zerog-storage-kit.onrender.com";
+let OG_STORAGE_API ="https://zerog-storage-kit.onrender.com";
 
 
 // Smart contract addresses and ABIs
@@ -1146,7 +1146,6 @@ app.listen(PORT, () => {
     console.error("❌ Failed to start server:", error);
     process.exit(1);
   }
-  
 }
 
 // Handle graceful shutdown
