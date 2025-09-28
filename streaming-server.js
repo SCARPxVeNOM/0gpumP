@@ -1,9 +1,11 @@
 const NodeMediaServer = require('node-media-server');
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 
 const app = express();
 app.use(cors());
+app.use(express.static('media'));
 
 // NodeMediaServer configuration for Render
 const config = {
@@ -15,7 +17,7 @@ const config = {
     ping_timeout: 60
   },
   http: {
-    port: process.env.PORT || 8000,
+    port: 8001, // Use different port for NodeMediaServer
     allow_origin: '*',
     mediaroot: './media'
   },
@@ -48,16 +50,36 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
-// Start the server
+// Serve HLS files
+app.get('/live/:streamKey.m3u8', (req, res) => {
+  const streamKey = req.params.streamKey;
+  const filePath = path.join(__dirname, 'media', 'live', streamKey, 'index.m3u8');
+  res.sendFile(filePath);
+});
+
+app.get('/live/:streamKey/:segment', (req, res) => {
+  const streamKey = req.params.streamKey;
+  const segment = req.params.segment;
+  const filePath = path.join(__dirname, 'media', 'live', streamKey, segment);
+  res.sendFile(filePath);
+});
+
+// Start the Express server
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
-  console.log(`🚀 NodeMediaServer running on port ${PORT}`);
+  console.log(`🚀 Express server running on port ${PORT}`);
   console.log(`📺 RTMP ingest: rtmp://your-domain/live/STREAM_KEY`);
   console.log(`📱 HLS playback: https://your-domain/live/STREAM_KEY.m3u8`);
 });
 
 // Start NodeMediaServer
-nms.run();
+try {
+  nms.run();
+  console.log('✅ NodeMediaServer started successfully');
+} catch (error) {
+  console.error('❌ NodeMediaServer failed to start:', error.message);
+  // Continue without NodeMediaServer for now
+}
 
 // Graceful shutdown
 process.on('SIGINT', () => {

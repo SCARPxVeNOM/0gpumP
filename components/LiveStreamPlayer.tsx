@@ -9,22 +9,42 @@ export default function LiveStreamPlayer({ streamUrl }: { streamUrl: string }) {
     const video = videoRef.current
     if (!video) return
 
-    // Dynamic import for HLS.js
-    import('hls.js').then((Hls) => {
-      let hls: any = null
+    let hls: any = null
 
-      if (Hls.default.isSupported()) {
-        hls = new Hls.default({ liveDurationInfinity: true })
+    // Dynamic import for HLS.js
+    import('hls.js').then((HlsModule) => {
+      const Hls = HlsModule.default || HlsModule
+
+      if (Hls.isSupported()) {
+        hls = new Hls({ 
+          liveDurationInfinity: true,
+          enableWorker: false,
+          lowLatencyMode: true
+        })
         hls.loadSource(streamUrl)
         hls.attachMedia(video)
+        
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error('HLS error:', data)
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                console.log('Fatal network error, trying to recover...')
+                hls.startLoad()
+                break
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log('Fatal media error, trying to recover...')
+                hls.recoverMediaError()
+                break
+              default:
+                console.log('Fatal error, destroying HLS...')
+                hls.destroy()
+                break
+            }
+          }
+        })
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = streamUrl
-      }
-
-      return () => {
-        if (hls) {
-          hls.destroy()
-        }
       }
     }).catch((error) => {
       console.error('Failed to load HLS.js:', error)
@@ -33,10 +53,23 @@ export default function LiveStreamPlayer({ streamUrl }: { streamUrl: string }) {
         video.src = streamUrl
       }
     })
+
+    return () => {
+      if (hls) {
+        hls.destroy()
+      }
+    }
   }, [streamUrl])
 
   return (
-    <video ref={videoRef} controls autoPlay playsInline className="w-full aspect-video rounded-xl bg-black" />
+    <video 
+      ref={videoRef} 
+      controls 
+      autoPlay 
+      playsInline 
+      className="w-full aspect-video rounded-xl bg-black"
+      style={{ minHeight: '400px' }}
+    />
   )
 }
 
