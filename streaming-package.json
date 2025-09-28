@@ -1,0 +1,18 @@
+{
+  "name": "0g-pump-streaming",
+  "version": "1.0.0",
+  "description": "NodeMediaServer for 0G Pump livestreaming",
+  "main": "streaming-server.js",
+  "scripts": {
+    "start": "node streaming-server.js",
+    "dev": "nodemon streaming-server.js"
+  },
+  "dependencies": {
+    "node-media-server": "^2.6.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

@@ -1,0 +1,25 @@
+FROM node:18-alpine
+
+# Install FFmpeg
+RUN apk add --no-cache ffmpeg
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY streaming-package.json package.json
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY streaming-server.js .
+
+# Create media directory
+RUN mkdir -p media
+
+# Expose ports
+EXPOSE 8000 1935
+
+# Start the server
+CMD ["npm", "start"]

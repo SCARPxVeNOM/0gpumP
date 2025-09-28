@@ -7,8 +7,11 @@ import FormData from "form-data";
 import { ethers } from "ethers";
 import fs from "fs";
 import path from "path";
+import { createServer } from "http";
+import { Server as SocketIOServer } from "socket.io";
 
 import crypto from "crypto";
+
 
 // Professional Database Architecture
 import { databaseManager } from "./lib/databaseManager.js";
@@ -17,11 +20,32 @@ import { dataService } from "./lib/dataService.js";
 
 dotenv.config();
 const app = express();
+const server = createServer(app);
+const io = new SocketIOServer(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
 // Enable CORS for frontend integration
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Socket.IO Chat functionality
+io.on('connection', (socket) => {
+  console.log('User connected to chat:', socket.id);
+  
+  socket.on('chat message', (msg) => {
+    console.log('Chat message:', msg);
+    io.emit('chat message', msg);
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('User disconnected from chat:', socket.id);
+  });
+});
 
 // 0G Storage API configuration
 let OG_STORAGE_API ="https://zerog-storage-kit.onrender.com";
@@ -62,6 +86,7 @@ async function postWithRetry(url, formData, headers, maxRetries = 3, timeoutMs =
   }
   throw lastErr;
 }
+
 
 // Initialize Professional Database Architecture
 async function initializeDatabase() {
@@ -1118,6 +1143,7 @@ app.post("/cache/clear", async (req, res) => {
   }
 });
 
+
 /**
  * START SERVER
  */
@@ -1129,7 +1155,7 @@ async function startServer() {
     await initializeDatabase();
     
     // Start the server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
       console.log(`🚀 Professional 0G Storage Integration Server running on http://localhost:${PORT}`);
   console.log(`📤 Upload endpoint: POST /upload`);
   console.log(`📥 Download endpoint: GET /download/:rootHash`);
@@ -1140,6 +1166,7 @@ app.listen(PORT, () => {
   console.log(`🔗 0G Storage API: ${OG_STORAGE_API}`);
       console.log(`⚡ Redis caching: Enabled with fallback`);
       console.log(`🗄️ SQLite database: Optimized with connection pooling`);
+      console.log(`💬 Socket.IO chat: Enabled on /socket.io/`);
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);

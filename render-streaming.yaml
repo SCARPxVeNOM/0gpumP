@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: 0g-pump-streaming
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node streaming-server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8000
