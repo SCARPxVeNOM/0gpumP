@@ -6,10 +6,10 @@ import { publicProvider } from 'wagmi/providers/public'
 import '@rainbow-me/rainbowkit/styles.css'
 
 const ogTestnet = {
-  id: 16601,
-  name: '0G Testnet',
-  network: '0g-testnet',
-  nativeCurrency: { name: 'OG', symbol: 'OG', decimals: 18 },
+  id: 16602,
+  name: '0G Galileo Testnet',
+  network: '0g-galileo-testnet',
+  nativeCurrency: { name: '0G', symbol: '0G', decimals: 18 },
   rpcUrls: { 
     default: { http: ['https://evmrpc-testnet.0g.ai'] },
     public: { http: ['https://evmrpc-testnet.0g.ai'] }

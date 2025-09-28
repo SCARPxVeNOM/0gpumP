@@ -12,11 +12,11 @@ module.exports = {
     }
   },
   networks: {
-    "0g-testnet": {
+    "0g-galileo-testnet": {
       url: "https://evmrpc-testnet.0g.ai",
-      chainId: 16601,
+      chainId: 16602,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      gasPrice: 1000000000, // 1 gwei
+      gasPrice: 2000000000, // 2 gwei
       gas: 8000000
     }
   }

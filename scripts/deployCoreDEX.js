@@ -50,9 +50,9 @@ export const TRADING_CONFIG = {
   ROUTER_ADDRESS: '${router.address}',
   WETH_ADDRESS: '${weth.address}',
   AUTO_TRADING_FACTORY_ADDRESS: '${process.env.AUTO_TRADING_FACTORY_ADDRESS || ''}',
-  NETWORK: '0g-testnet',
+  NETWORK: '0g-galileo-testnet',
   RPC_URL: 'https://evmrpc-testnet.0g.ai',
-  CHAIN_ID: 16601
+  CHAIN_ID: 16602
 };
 `;
   fs.writeFileSync(path.join('lib', 'trading-config.ts'), frontendConfig);

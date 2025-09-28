@@ -5,7 +5,7 @@ export const TRADING_CONFIG = {
   ROUTER_ADDRESS: '0x631b62C792121cE905e73195b6B3a09bd3557a19',
   WETH_ADDRESS: '0x2b4EcA0CD50864faBA28d21E4fEB9A73B0db9BDB',
   AUTO_TRADING_FACTORY_ADDRESS: '',
-  NETWORK: '0g-testnet',
+  NETWORK: '0g-galileo-testnet',
   RPC_URL: 'https://evmrpc-testnet.0g.ai',
-  CHAIN_ID: 16601
+  CHAIN_ID: 16602
 };

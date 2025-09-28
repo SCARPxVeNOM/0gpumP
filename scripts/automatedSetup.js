@@ -225,9 +225,9 @@ async function main() {
       wethAddress,
       autoTradingFactoryAddress: autoTradingFactory.address,
       deployerAddress: deployer.address,
-      network: "0g-testnet",
+      network: "0g-galileo-testnet",
       rpcUrl: "https://evmrpc-testnet.0g.ai",
-      chainId: 16601,
+      chainId: 16602,
       deploymentTime: new Date().toISOString()
     };
     
@@ -246,9 +246,9 @@ export const TRADING_CONFIG = {
   ROUTER_ADDRESS: '${routerAddress}',
   WETH_ADDRESS: '${wethAddress}',
   AUTO_TRADING_FACTORY_ADDRESS: '${autoTradingFactory.address}',
-  NETWORK: '0g-testnet',
+  NETWORK: '0g-galileo-testnet',
   RPC_URL: 'https://evmrpc-testnet.0g.ai',
-  CHAIN_ID: 16601
+  CHAIN_ID: 16602
 };
 
 export const AUTO_TRADING_CONFIG = {
