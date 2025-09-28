@@ -21,17 +21,6 @@ const config = {
     allow_origin: '*',
     mediaroot: './media'
   },
-  trans: {
-    ffmpeg: '/usr/bin/ffmpeg',
-    tasks: [
-      {
-        app: 'live',
-        hls: true,
-        hlsFlags: '[hls_time=2:hls_list_size=3:hls_flags=delete_segments]',
-        dash: false
-      }
-    ]
-  }
 };
 
 // Create NodeMediaServer instance
