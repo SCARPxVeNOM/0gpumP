@@ -9,67 +9,48 @@ export default function LiveStreamPlayer({ streamUrl }: { streamUrl: string }) {
     const video = videoRef.current
     if (!video) return
 
-    let hls: any = null
+    // Simple approach - let the browser handle HLS natively
+    video.src = streamUrl
+    video.load()
 
-    // Dynamic import for HLS.js
-    import('hls.js').then((HlsModule) => {
-      const Hls = HlsModule.default || HlsModule
+    // Add error handling
+    const handleError = (e: Event) => {
+      console.error('Video error:', e)
+    }
 
-      if (Hls.isSupported()) {
-        hls = new Hls({ 
-          liveDurationInfinity: true,
-          enableWorker: false,
-          lowLatencyMode: true
-        })
-        hls.loadSource(streamUrl)
-        hls.attachMedia(video)
-        
-        hls.on(Hls.Events.ERROR, (event, data) => {
-          console.error('HLS error:', data)
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                console.log('Fatal network error, trying to recover...')
-                hls.startLoad()
-                break
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                console.log('Fatal media error, trying to recover...')
-                hls.recoverMediaError()
-                break
-              default:
-                console.log('Fatal error, destroying HLS...')
-                hls.destroy()
-                break
-            }
-          }
-        })
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = streamUrl
-      }
-    }).catch((error) => {
-      console.error('Failed to load HLS.js:', error)
-      // Fallback to native HLS support
-      if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = streamUrl
-      }
-    })
+    const handleLoadStart = () => {
+      console.log('Video loading started')
+    }
+
+    const handleCanPlay = () => {
+      console.log('Video can play')
+    }
+
+    video.addEventListener('error', handleError)
+    video.addEventListener('loadstart', handleLoadStart)
+    video.addEventListener('canplay', handleCanPlay)
 
     return () => {
-      if (hls) {
-        hls.destroy()
-      }
+      video.removeEventListener('error', handleError)
+      video.removeEventListener('loadstart', handleLoadStart)
+      video.removeEventListener('canplay', handleCanPlay)
     }
   }, [streamUrl])
 
   return (
-    <video 
-      ref={videoRef} 
-      controls 
-      autoPlay 
-      playsInline 
-      className="w-full aspect-video rounded-xl bg-black"
-      style={{ minHeight: '400px' }}
-    />
+    <div className="w-full aspect-video rounded-xl bg-black relative">
+      <video 
+        ref={videoRef} 
+        controls 
+        autoPlay 
+        playsInline 
+        className="w-full h-full rounded-xl"
+        style={{ minHeight: '400px' }}
+      />
+      <div className="absolute top-4 left-4 bg-black/50 text-white px-3 py-1 rounded text-sm">
+        Live Stream
+      </div>
+    </div>
   )
 }
 
