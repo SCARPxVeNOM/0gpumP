@@ -118,7 +118,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     console.log(`📤 Uploading file to 0G Storage...`);
     
     // Upload file with 0.3.1 API syntax
-    const [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer);
+    const [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer as any);
 
     if (uploadErr !== null) {
       throw new Error(`Upload error: ${uploadErr}`);
