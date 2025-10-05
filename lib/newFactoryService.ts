@@ -1,4 +1,4 @@
-import { ethers } from 'ethers'
+import { ethers, BrowserProvider, Contract, formatEther, parseEther, formatUnits } from 'ethers'
 
 // ABI for the new Factory contract
 const FACTORY_ABI = [
@@ -24,14 +24,14 @@ export interface CreatePairResult {
 }
 
 export class NewFactoryService {
-  private provider: ethers.providers.Web3Provider | null = null
-  private signer: ethers.Signer | null = null
-  private factoryContract: ethers.Contract | null = null
+  private provider: BrowserProvider | null = null
+  private signer: any = null
+  private factoryContract: Contract | null = null
 
-  initialize(provider: ethers.providers.Web3Provider, factoryAddress: string) {
+  initialize(provider: BrowserProvider, factoryAddress: string) {
     this.provider = provider
     this.signer = provider.getSigner()
-    this.factoryContract = new ethers.Contract(factoryAddress, FACTORY_ABI, this.signer)
+    this.factoryContract = new Contract(factoryAddress, FACTORY_ABI, this.signer)
   }
 
   // Create a new token pair with bonding curve
@@ -48,14 +48,14 @@ export class NewFactoryService {
       console.log(`⛽ Seed OG Amount: ${params.seedOgAmount}`)
 
       // Convert amounts to wei
-      const seedTokenAmountWei = ethers.utils.parseEther(params.seedTokenAmount)
-      const seedOgAmountWei = ethers.utils.parseEther(params.seedOgAmount)
+      const seedTokenAmountWei = parseEther(params.seedTokenAmount)
+      const seedOgAmountWei = parseEther(params.seedOgAmount)
 
       // Get current gas price and add premium for faster confirmation
-      const gasPrice = await this.provider!.getGasPrice()
-      const premiumGasPrice = gasPrice.mul(120).div(100) // 20% premium
-      console.log(`⛽ Gas price: ${ethers.utils.formatUnits(gasPrice, 'gwei')} Gwei`)
-      console.log(`⛽ Premium gas price: ${ethers.utils.formatUnits(premiumGasPrice, 'gwei')} Gwei`)
+      const gasPrice = await this.provider!.getFeeData()
+      const premiumGasPrice = gasPrice.gasPrice! * 120n / 100n // 20% premium
+      console.log(`⛽ Gas price: ${formatUnits(gasPrice.gasPrice!, 'gwei')} Gwei`)
+      console.log(`⛽ Premium gas price: ${formatUnits(premiumGasPrice, 'gwei')} Gwei`)
 
       console.log('⏳ Sending transaction...')
       const tx = await this.factoryContract.createPair(
@@ -95,7 +95,7 @@ export class NewFactoryService {
       // Parse the PairCreated event to get addresses
       const pairCreatedEvent = receipt.logs.find((log: any) => {
         try {
-          const iface = new ethers.utils.Interface(FACTORY_ABI)
+          const iface = new ethers.Interface(FACTORY_ABI)
           const parsed = iface.parseLog(log)
           return parsed.name === 'PairCreated'
         } catch {
@@ -107,7 +107,7 @@ export class NewFactoryService {
         throw new Error('PairCreated event not found in transaction receipt')
       }
 
-      const iface = new ethers.utils.Interface(FACTORY_ABI)
+      const iface = new ethers.Interface(FACTORY_ABI)
       const parsed = iface.parseLog(pairCreatedEvent)
       const [tokenAddress, curveAddress] = parsed.args
 
@@ -143,7 +143,7 @@ export class NewFactoryService {
 
       return {
         treasury,
-        defaultFeeBps: defaultFeeBps.toNumber()
+        defaultFeeBps: Number(defaultFeeBps)
       }
     } catch (error) {
       console.error('Failed to get factory info:', error)

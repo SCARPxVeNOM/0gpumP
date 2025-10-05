@@ -47,7 +47,7 @@ class OGStorageSDK {
     try {
       // Initialize Web3 provider
       const { ethers } = await import('ethers');
-      this.web3Provider = new ethers.providers.JsonRpcProvider(this.config.evmRpc);
+      this.web3Provider = new ethers.JsonRpcProvider(this.config.evmRpc);
       
       // Initialize Indexer client (simulated for now)
       this.indexerClient = {
@@ -73,7 +73,7 @@ class OGStorageSDK {
   async calculateFileHash(data: string): Promise<string> {
     try {
       const { ethers } = await import('ethers');
-      const hash = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(data));
+      const hash = ethers.keccak256(ethers.toUtf8Bytes(data));
       return hash;
     } catch (error) {
       console.error('Error calculating file hash:', error);

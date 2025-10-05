@@ -1,4 +1,4 @@
-import { ethers } from 'ethers'
+import { ethers, BrowserProvider, Contract, formatEther, parseEther } from 'ethers'
 
 // ABI for the new BondingCurve contract
 const BONDING_CURVE_ABI = [
@@ -55,10 +55,10 @@ export interface SellQuote {
 }
 
 export class NewBondingCurveTradingService {
-  private provider: ethers.providers.Web3Provider | null = null
-  private signer: ethers.Signer | null = null
+  private provider: BrowserProvider | null = null
+  private signer: any = null
 
-  initialize(provider: ethers.providers.Web3Provider) {
+  initialize(provider: BrowserProvider) {
     this.provider = provider
     this.signer = provider.getSigner()
   }
@@ -68,7 +68,7 @@ export class NewBondingCurveTradingService {
     if (!this.provider) throw new Error('Service not initialized')
     
     try {
-      const curve = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, this.provider)
+      const curve = new Contract(curveAddress, BONDING_CURVE_ABI, this.provider)
       
       // Get all curve data
       const [tokenAddress, ogReserve, tokenReserve, feeBps, seeded] = await Promise.all([
@@ -80,17 +80,17 @@ export class NewBondingCurveTradingService {
       ])
 
       // Calculate current price (OG per token)
-      const currentPrice = ogReserve.gt(0) && tokenReserve.gt(0) 
-        ? ogReserve.mul(ethers.utils.parseEther('1')).div(tokenReserve)
-        : ethers.BigNumber.from(0)
+      const currentPrice = ogReserve > 0n && tokenReserve > 0n 
+        ? (ogReserve * parseEther('1')) / tokenReserve
+        : 0n
 
       return {
         tokenAddress,
         curveAddress,
-        ogReserve: ethers.utils.formatEther(ogReserve),
-        tokenReserve: ethers.utils.formatEther(tokenReserve),
-        currentPrice: ethers.utils.formatEther(currentPrice),
-        feeBps: feeBps.toNumber ? feeBps.toNumber() : Number(feeBps),
+        ogReserve: formatEther(ogReserve),
+        tokenReserve: formatEther(tokenReserve),
+        currentPrice: formatEther(currentPrice),
+        feeBps: Number(feeBps),
         seeded
       }
     } catch (error) {
@@ -104,8 +104,8 @@ export class NewBondingCurveTradingService {
     if (!this.provider) throw new Error('Service not initialized')
     
     try {
-      const curve = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, this.provider)
-      const ogAmountWei = ethers.utils.parseEther(ogAmount)
+      const curve = new Contract(curveAddress, BONDING_CURVE_ABI, this.provider)
+      const ogAmountWei = parseEther(ogAmount)
       
       // Get current reserves
       const [ogReserve, tokenReserve, feeBps] = await Promise.all([
@@ -115,23 +115,23 @@ export class NewBondingCurveTradingService {
       ])
 
       // Calculate fee
-      const fee = ogAmountWei.mul(feeBps).div(10000)
-      const ogInAfterFee = ogAmountWei.sub(fee)
+      const fee = (ogAmountWei * BigInt(feeBps)) / 10000n
+      const ogInAfterFee = ogAmountWei - fee
 
       // Calculate tokens out using constant product formula
-      const k = ogReserve.mul(tokenReserve)
-      const newOgReserve = ogReserve.add(ogInAfterFee)
-      const newTokenReserve = k.div(newOgReserve)
-      const tokensOut = tokenReserve.sub(newTokenReserve)
+      const k = ogReserve * tokenReserve
+      const newOgReserve = ogReserve + ogInAfterFee
+      const newTokenReserve = k / newOgReserve
+      const tokensOut = tokenReserve - newTokenReserve
 
       // Calculate price impact
-      const priceImpact = tokensOut.mul(ethers.utils.parseEther('1')).div(ogInAfterFee)
+      const priceImpact = (tokensOut * parseEther('1')) / ogInAfterFee
 
       return {
         inputAmount: ogAmount,
-        outputAmount: ethers.utils.formatEther(tokensOut),
-        fee: ethers.utils.formatEther(fee),
-        priceImpact: ethers.utils.formatEther(priceImpact)
+        outputAmount: formatEther(tokensOut),
+        fee: formatEther(fee),
+        priceImpact: formatEther(priceImpact)
       }
     } catch (error) {
       console.error('Error getting buy quote:', error)
@@ -144,8 +144,8 @@ export class NewBondingCurveTradingService {
     if (!this.provider) throw new Error('Service not initialized')
     
     try {
-      const curve = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, this.provider)
-      const tokenAmountWei = ethers.utils.parseEther(tokenAmount)
+      const curve = new Contract(curveAddress, BONDING_CURVE_ABI, this.provider)
+      const tokenAmountWei = parseEther(tokenAmount)
       
       // Get current reserves
       const [ogReserve, tokenReserve, feeBps] = await Promise.all([
@@ -155,23 +155,23 @@ export class NewBondingCurveTradingService {
       ])
 
       // Calculate OG out using constant product formula
-      const k = ogReserve.mul(tokenReserve)
-      const newTokenReserve = tokenReserve.add(tokenAmountWei)
-      const newOgReserve = k.div(newTokenReserve)
-      const ogOutBeforeFee = ogReserve.sub(newOgReserve)
+      const k = ogReserve * tokenReserve
+      const newTokenReserve = tokenReserve + tokenAmountWei
+      const newOgReserve = k / newTokenReserve
+      const ogOutBeforeFee = ogReserve - newOgReserve
 
       // Calculate fee
-      const fee = ogOutBeforeFee.mul(feeBps).div(10000)
-      const ogOut = ogOutBeforeFee.sub(fee)
+      const fee = (ogOutBeforeFee * BigInt(feeBps)) / 10000n
+      const ogOut = ogOutBeforeFee - fee
 
       // Calculate price impact
-      const priceImpact = ogOut.mul(ethers.utils.parseEther('1')).div(tokenAmountWei)
+      const priceImpact = (ogOut * parseEther('1')) / tokenAmountWei
 
       return {
         inputAmount: tokenAmount,
-        outputAmount: ethers.utils.formatEther(ogOut),
-        fee: ethers.utils.formatEther(fee),
-        priceImpact: ethers.utils.formatEther(priceImpact)
+        outputAmount: formatEther(ogOut),
+        fee: formatEther(fee),
+        priceImpact: formatEther(priceImpact)
       }
     } catch (error) {
       console.error('Error getting sell quote:', error)
@@ -184,9 +184,9 @@ export class NewBondingCurveTradingService {
     if (!this.signer) throw new Error('No signer available')
     
     try {
-      const curve = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, this.signer)
-      const ogAmountWei = ethers.utils.parseEther(ogAmount)
-      const minTokensOutWei = ethers.utils.parseEther(minTokensOut)
+      const curve = new Contract(curveAddress, BONDING_CURVE_ABI, this.signer)
+      const ogAmountWei = parseEther(ogAmount)
+      const minTokensOutWei = parseEther(minTokensOut)
       
       // Set deadline to 20 minutes from now
       const deadline = Math.floor(Date.now() / 1000) + 1200
@@ -212,18 +212,18 @@ export class NewBondingCurveTradingService {
     if (!this.signer) throw new Error('No signer available')
     
     try {
-      const curve = new ethers.Contract(curveAddress, BONDING_CURVE_ABI, this.signer)
-      const tokenAmountWei = ethers.utils.parseEther(tokenAmount)
-      const minOgOutWei = ethers.utils.parseEther(minOgOut) // FIXED: Convert to BigNumber
+      const curve = new Contract(curveAddress, BONDING_CURVE_ABI, this.signer)
+      const tokenAmountWei = parseEther(tokenAmount)
+      const minOgOutWei = parseEther(minOgOut) // FIXED: Convert to BigNumber
       
       // First approve the curve to spend tokens
       const curveInfo = await this.getCurveInfo(curveAddress)
       if (!curveInfo) throw new Error('Could not get curve info')
       
-      const token = new ethers.Contract(curveInfo.tokenAddress, MEME_TOKEN_ABI, this.signer)
+      const token = new Contract(curveInfo.tokenAddress, MEME_TOKEN_ABI, this.signer)
       
       const allowance = await token.allowance(await this.signer.getAddress(), curveAddress)
-      if (allowance.lt(tokenAmountWei)) {
+      if (allowance < tokenAmountWei) {
         const approveTx = await token.approve(curveAddress, tokenAmountWei)
         await approveTx.wait()
       }
@@ -252,9 +252,9 @@ export class NewBondingCurveTradingService {
     if (!this.provider) throw new Error('Service not initialized')
     
     try {
-      const token = new ethers.Contract(tokenAddress, MEME_TOKEN_ABI, this.provider)
+      const token = new Contract(tokenAddress, MEME_TOKEN_ABI, this.provider)
       const balance = await token.balanceOf(userAddress)
-      return ethers.utils.formatEther(balance)
+      return formatEther(balance)
     } catch (error) {
       console.error('Error getting token balance:', error)
       return '0'
@@ -267,7 +267,7 @@ export class NewBondingCurveTradingService {
     
     try {
       const balance = await this.provider.getBalance(userAddress)
-      return ethers.utils.formatEther(balance)
+      return formatEther(balance)
     } catch (error) {
       console.error('Error getting native balance:', error)
       return '0'

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useAccount, usePublicClient } from 'wagmi'
-import { ethers } from 'ethers'
+import { ethers, BrowserProvider } from 'ethers'
 import { newBondingCurveTradingService } from '../../lib/newBondingCurveTradingService'
 import { Info, X, Copy, ExternalLink } from 'lucide-react'
 
@@ -108,7 +108,7 @@ export default function EnhancedTradingCard({
       try {
         const eth = (typeof window !== 'undefined') ? (window as any).ethereum : undefined
         if (!eth) return
-        const ethersProvider = new ethers.providers.Web3Provider(eth, 'any')
+        const ethersProvider = new BrowserProvider(eth)
         setProvider(ethersProvider)
         newBondingCurveTradingService.initialize(ethersProvider)
         

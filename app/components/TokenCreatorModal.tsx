@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { ethers } from 'ethers'
+import { ethers, BrowserProvider } from 'ethers'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Plus, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -83,7 +83,7 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
       try {
         const eth = (typeof window !== 'undefined') ? (window as any).ethereum : undefined
         if (!eth) return
-        const provider = new ethers.providers.Web3Provider(eth, 'any')
+        const provider = new BrowserProvider(eth)
         // Ensure signer is available (RainbowKit already connects, but this is safe)
         provider.send('eth_requestAccounts', []).catch(() => {})
         newFactoryService.initialize(provider, FACTORY_ADDRESS)
