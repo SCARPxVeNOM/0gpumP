@@ -95,7 +95,8 @@ async function findTokensFromStorage() {
     console.log("\n5️⃣ Checking deployment records...");
     const deploymentFiles = [
       'deployment-config.json',
-      'deployments/ogtoken-0g-testnet.json'
+      'deployments/ogtoken-0g-galileo-testnet.json',
+      'deployments/token-factory-0g-galileo-testnet.json'
     ];
     
     for (const file of deploymentFiles) {

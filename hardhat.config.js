@@ -1,4 +1,5 @@
-require("@nomiclabs/hardhat-waffle");
+require("@nomicfoundation/hardhat-ethers");
+require("@nomicfoundation/hardhat-chai-matchers");
 require("dotenv").config();
 
 module.exports = {
@@ -16,8 +17,11 @@ module.exports = {
       url: "https://evmrpc-testnet.0g.ai",
       chainId: 16602,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      gasPrice: 2000000000, // 2 gwei
-      gas: 8000000
+      // Ensure EIP-1559 with min tip of 2 gwei
+      gas: 8000000,
+      gasPrice: undefined,
+      maxPriorityFeePerGas: 2000000000,
+      maxFeePerGas: 2000000000
     }
   }
 };

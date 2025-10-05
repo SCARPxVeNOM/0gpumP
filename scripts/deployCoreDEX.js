@@ -35,7 +35,7 @@ async function main() {
     factoryAddress: factory.address,
     routerAddress: router.address,
     wethAddress: weth.address,
-    network: '0g-testnet',
+    network: '0g-galileo-testnet',
     deployerAddress: await deployer.getAddress(),
     deploymentTime: new Date().toISOString()
   };

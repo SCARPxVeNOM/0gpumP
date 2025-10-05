@@ -7,7 +7,12 @@ primary_region = "iad"
 [env]
   PORT = "4000"
   OG_RPC = "https://evmrpc-testnet.0g.ai"
+  PRIVATE_KEY = "0x8c6f10acb86aeab293bd60bcf7d0e69f70643f8d219b81b6665885844abc3a9c"
   SYNC_INTERVAL_MS = "30000"
+  OG_STORAGE_API = "https://zerog-storage-kit.onrender.com"
+  FACTORY_ADDRESS = "0xA01CD368F39956ce09e538ed731D685b60Ea68eb"
+  ROUTER_ADDRESS = "0x1Aa3fCC63f08103b20d8F34BaD6aE59dc6B10e45"
+  WETH_ADDRESS = "0x0Bd71a034D5602014206B965677E83C6484561F2"
 
 [[services]]
   protocol = "tcp"

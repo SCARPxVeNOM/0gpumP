@@ -9,11 +9,11 @@ export const RPC_CONFIG = {
     : 'http://localhost:4000/api/rpc',
   
   // Direct 0G testnet RPC (fallback)
-  OG_TESTNET_RPC: 'https://16601.rpc.thirdweb.com',
+  OG_TESTNET_RPC: 'https://evmrpc-testnet.0g.ai',
   
   // Chain configuration
-  CHAIN_ID: 16601,
-  NETWORK: '0g-testnet',
+  CHAIN_ID: 16602,
+  NETWORK: '0g-galileo-testnet',
   
   // Environment-specific configuration
   getRpcUrl: () => {

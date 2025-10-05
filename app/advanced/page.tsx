@@ -1,123 +1,77 @@
 "use client";
+import React from "react";
+import { useEffect, useState } from "react";
 
-import { useEffect, useMemo, useState } from "react";
+type Suggestion = {
+  token: string;
+  symbol: string;
+  address: string;
+  summary: string;
+};
 
 export default function AdvancedPage() {
-  const backendUrl = useMemo(() =>
-    process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "") || "http://localhost:4000",
-  []);
-
-  const [loading, setLoading] = useState(false);
-  const [models, setModels] = useState<any[]>([]);
-  const [suggestions, setSuggestions] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState(
-    "Based on recent activity and volumes, suggest 5 trending tokens with a one-line rationale and risk note. Return JSON."
-  );
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
   useEffect(() => {
-    const fetchModels = async () => {
+    const load = async () => {
       try {
-        const res = await fetch(`${backendUrl}/ai/models`, { cache: "no-store" });
+        const res = await fetch("/api/ai/suggestions", { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to load suggestions");
         const data = await res.json();
-        if (data?.success) setModels(data.models || []);
+        setSuggestions(data.suggestions || []);
       } catch (e: any) {
-        // best-effort only
+        setError(e?.message || "Failed to load");
+      } finally {
+        setLoading(false);
       }
     };
-    fetchModels();
-  }, [backendUrl]);
-
-  const runSuggestions = async () => {
-    setLoading(true);
-    setError(null);
-    setSuggestions(null);
-    try {
-      const res = await fetch(`${backendUrl}/ai/suggestions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt })
-      });
-      const data = await res.json();
-      if (!data?.success) throw new Error(data?.error || "Failed to fetch suggestions");
-      setSuggestions(data.suggestions || []);
-    } catch (e: any) {
-      setError(e.message || "Something went wrong");
-    } finally {
-      setLoading(false);
-    }
-  };
+    load();
+  }, []);
 
   return (
-    <div className="px-6 py-8">
-      <h1 className="text-3xl font-extrabold mb-4">AI Token Suggestions</h1>
-      <p className="text-sm text-muted-foreground mb-6">
-        Powered by 0G Compute. Click "Generate" to get AI-driven token recommendations based on on-chain market stats.
-      </p>
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="md:col-span-2 rounded-xl border-2 border-black bg-blue-50 p-4 shadow-[6px_6px_0_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition">
-          <label className="block text-sm font-semibold mb-2">Prompt</label>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={5}
-            className="w-full rounded-lg border-2 border-black p-3 outline-none"
-          />
-          <button
-            onClick={runSuggestions}
-            disabled={loading}
-            className="mt-3 rounded-lg border-2 border-black bg-yellow-400 px-4 py-2 font-bold shadow-[4px_4px_0_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-none disabled:opacity-60"
-          >
-            {loading ? "Generating..." : "Generate"}
-          </button>
-          {error && (
-            <div className="mt-3 rounded-lg border-2 border-black bg-red-100 p-3 font-semibold">
-              {error}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-xl border-2 border-black bg-white p-4 shadow-[6px_6px_0_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition">
-          <h2 className="font-bold mb-2">Available Models</h2>
-          <ul className="text-sm space-y-1 max-h-56 overflow-auto pr-1">
-            {models?.length ? models.map((m: any, i: number) => (
-              <li key={i} className="truncate">{typeof m === 'string' ? m : m?.name || JSON.stringify(m)}</li>
-            )) : <li className="text-muted-foreground">Not configured</li>}
-          </ul>
-          <div className="mt-3 text-xs text-muted-foreground">
-            Backend: {backendUrl}
-          </div>
-        </div>
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold">Advanced</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          AI-driven token suggestions powered by 0G Compute. Results update as on-chain data changes.
+        </p>
       </div>
 
-      {suggestions && (
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {suggestions.map((s: any, idx: number) => (
-            <div
-              key={idx}
-              className="rounded-xl border-2 border-black bg-white p-4 shadow-[6px_6px_0_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition"
-            >
-              <div className="text-lg font-extrabold mb-1">{s.title || s.tokenId || `Suggestion ${idx + 1}`}</div>
-              {s.summary && <p className="text-sm mb-1">{s.summary}</p>}
-              {s.risk && <p className="text-xs text-amber-700">Risk: {s.risk}</p>}
-              {s.tokenId && (
+      {loading && (
+        <div className="text-sm text-gray-500">Loading AI suggestions…</div>
+      )}
+
+      {error && (
+        <div className="text-red-500 text-sm">{error}</div>
+      )}
+
+      {!loading && !error && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {suggestions.map((s) => (
+            <div key={s.address} className="border rounded-lg p-4 bg-white/5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-lg font-medium">{s.token}</div>
+                  <div className="text-xs text-gray-400">{s.symbol} • {s.address.slice(0, 6)}…{s.address.slice(-4)}</div>
+                </div>
                 <a
-                  href={`/bonding-curve?token=${encodeURIComponent(s.tokenId)}`}
-                  className="inline-block mt-3 rounded-lg border-2 border-black bg-blue-200 px-3 py-1 font-bold shadow-[3px_3px_0_#000] hover:translate-x-1 hover:translate-y-1 hover:shadow-none"
+                  className="text-sm px-3 py-1 rounded bg-blue-600 text-white"
+                  href={`/tokens/${s.address}`}
                 >
                   View Token
                 </a>
-              )}
+              </div>
+              <p className="text-sm mt-3 leading-6 whitespace-pre-wrap">{s.summary}</p>
             </div>
           ))}
         </div>
       )}
 
+      <div className="mt-8 text-xs text-gray-400">
+        Note: If 0G Compute broker isn’t configured, this page shows mock data. Configure PRIVATE_KEY and broker package to enable live AI.
+      </div>
     </div>
   );
 }
-
- 
-
-

@@ -7,8 +7,6 @@ import FormData from "form-data";
 import { ethers } from "ethers";
 import fs from "fs";
 import path from "path";
-import { createServer } from "http";
-import { Server as SocketIOServer } from "socket.io";
 
 import crypto from "crypto";
 
@@ -20,38 +18,17 @@ import { dataService } from "./lib/dataService.js";
 
 dotenv.config();
 const app = express();
-const server = createServer(app);
-const io = new SocketIOServer(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
 
 // Enable CORS for frontend integration
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Socket.IO Chat functionality
-io.on('connection', (socket) => {
-  console.log('User connected to chat:', socket.id);
-  
-  socket.on('chat message', (msg) => {
-    console.log('Chat message:', msg);
-    io.emit('chat message', msg);
-  });
-  
-  socket.on('disconnect', () => {
-    console.log('User disconnected from chat:', socket.id);
-  });
-});
-
 // 0G Storage API configuration
 let OG_STORAGE_API ="https://zerog-storage-kit.onrender.com";
 
 // Smart contract addresses and ABIs
-const FACTORY_ADDRESS = "0xC5410Bf4F2B8f1eEf3425bCcE7B82DAA03eF7a74";
+const FACTORY_ADDRESS = "0xA01CD368F39956ce09e538ed731D685b60Ea68eb";
 const FACTORY_ABI = [
   "function createToken(string memory _name, string memory _symbol, string memory _description, bytes32 _metadataRootHash, bytes32 _imageRootHash) external returns (address token, address curve)",
   "event TokenCreated(address indexed token, address indexed curve, address indexed creator, uint256 timestamp, string name, string symbol, string description, bytes32 metadataRootHash, bytes32 imageRootHash)"
@@ -716,7 +693,7 @@ app.get("/profile/:walletAddress", async (req, res) => {
   try {
     const { walletAddress } = req.params;
 
-    if (!walletAddress || !ethers.utils.isAddress(walletAddress)) {
+    if (!walletAddress || !ethers.isAddress(walletAddress)) {
       return res.status(400).json({ error: "Invalid wallet address" });
     }
 
@@ -772,7 +749,7 @@ app.put("/profile/:walletAddress", async (req, res) => {
     const { walletAddress } = req.params;
     const profileData = req.body;
 
-    if (!walletAddress || !ethers.utils.isAddress(walletAddress)) {
+    if (!walletAddress || !ethers.isAddress(walletAddress)) {
       return res.status(400).json({ error: "Invalid wallet address" });
     }
 
@@ -848,7 +825,7 @@ app.post("/profile/:walletAddress/tokens", async (req, res) => {
     const { walletAddress } = req.params;
     const { tokenAddress, tokenName, tokenSymbol, curveAddress, txHash, imageUrl, description } = req.body;
     
-    if (!walletAddress || !ethers.utils.isAddress(walletAddress)) {
+    if (!walletAddress || !ethers.isAddress(walletAddress)) {
       return res.status(400).json({ error: "Invalid wallet address" });
     }
 
@@ -977,7 +954,7 @@ app.post("/profile/:walletAddress/avatar", upload.single('avatar'), async (req, 
   try {
     const { walletAddress } = req.params;
     
-    if (!walletAddress || !ethers.utils.isAddress(walletAddress)) {
+    if (!walletAddress || !ethers.isAddress(walletAddress)) {
       return res.status(400).json({ 
         success: false,
         error: "Invalid wallet address" 
@@ -1037,7 +1014,7 @@ app.put("/profile/:walletAddress/stats", async (req, res) => {
     const { walletAddress } = req.params;
     const { totalTrades, totalVolume, tokensHeld, lastTradeAt } = req.body;
     
-    if (!walletAddress || !ethers.utils.isAddress(walletAddress)) {
+    if (!walletAddress || !ethers.isAddress(walletAddress)) {
       return res.status(400).json({ error: "Invalid wallet address" });
     }
 
@@ -1155,7 +1132,7 @@ async function startServer() {
     await initializeDatabase();
     
     // Start the server
-server.listen(PORT, () => {
+app.listen(PORT, () => {
       console.log(`🚀 Professional 0G Storage Integration Server running on http://localhost:${PORT}`);
   console.log(`📤 Upload endpoint: POST /upload`);
   console.log(`📥 Download endpoint: GET /download/:rootHash`);
@@ -1166,7 +1143,6 @@ server.listen(PORT, () => {
   console.log(`🔗 0G Storage API: ${OG_STORAGE_API}`);
       console.log(`⚡ Redis caching: Enabled with fallback`);
       console.log(`🗄️ SQLite database: Optimized with connection pooling`);
-      console.log(`💬 Socket.IO chat: Enabled on /socket.io/`);
     });
   } catch (error) {
     console.error("❌ Failed to start server:", error);

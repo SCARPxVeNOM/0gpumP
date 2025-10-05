@@ -9,6 +9,16 @@ services:
     envVars:
       - key: PORT
         value: 3000
+      - key: RPC_URL
+        value: https://evmrpc-testnet.0g.ai
+      - key: INDEXER_RPC
+        value: https://indexer-storage-testnet-turbo.0g.ai
+      - key: PRIVATE_KEY
+        value: 0x8c6f10acb86aeab293bd60bcf7d0e69f70643f8d219b81b6665885844abc3a9c
+      - key: GAS_PRICE
+        value: "2000000000"
+      - key: MAX_GAS_LIMIT
+        value: "20000000"
     rootDir: 0g-storage-ts-starter-kit
 
   - type: web
@@ -23,15 +33,15 @@ services:
         value: 4000
       - key: OG_RPC
         value: https://evmrpc-testnet.0g.ai
+      - key: PRIVATE_KEY
+        value: 0x8c6f10acb86aeab293bd60bcf7d0e69f70643f8d219b81b6665885844abc3a9c
       - key: SYNC_INTERVAL_MS
         value: 30000
-      - key: OG_STORAGE_HOST
-        fromService:
-          type: web
-          name: 0g-storage-kit
-          property: host
-      - key: OG_STORAGE_PORT
-        fromService:
-          type: web
-          name: 0g-storage-kit
-          property: port
+      - key: OG_STORAGE_API
+        value: https://zerog-storage-kit.onrender.com
+      - key: FACTORY_ADDRESS
+        value: 0xA01CD368F39956ce09e538ed731D685b60Ea68eb
+      - key: ROUTER_ADDRESS
+        value: 0x1Aa3fCC63f08103b20d8F34BaD6aE59dc6B10e45
+      - key: WETH_ADDRESS
+        value: 0x0Bd71a034D5602014206B965677E83C6484561F2

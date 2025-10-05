@@ -40,7 +40,7 @@ async function main() {
 
   // Save deployment info
   const deploymentInfo = {
-    network: '0g-testnet',
+    network: '0g-galileo-testnet',
     tokenFactory: tokenFactory.address,
     owner: owner,
     feeRecipient: feeRecipient,
@@ -53,7 +53,7 @@ async function main() {
 
   // Save to file
   const fs = require('fs');
-  const deploymentPath = `deployments/token-factory-0g-testnet.json`;
+  const deploymentPath = `deployments/token-factory-0g-galileo-testnet.json`;
   
   // Ensure deployments directory exists
   if (!fs.existsSync('deployments')) {

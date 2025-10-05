@@ -48,7 +48,7 @@ async function main() {
 
   // Save deployment info
   const deploymentInfo = {
-    network: "0g-testnet",
+    network: "0g-galileo-testnet",
     deployer: deployer.address,
     contracts: {
       TokenFactory: {
