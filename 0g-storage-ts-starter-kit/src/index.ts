@@ -16,7 +16,7 @@ const upload = multer({ dest: 'uploads/' });
 // Constants from environment variables
 const RPC_URL = process.env.RPC_URL || 'https://evmrpc-testnet.0g.ai/';
 const INDEXER_RPC = process.env.INDEXER_RPC || 'https://indexer-storage-testnet-turbo.0g.ai';
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const PRIVATE_KEY = '0x8c6f10acb86aeab293bd60bcf7d0e69f70643f8d219b81b6665885844abc3a9c';
 
 if (!PRIVATE_KEY) {
   console.error('❌ Private key not found in environment variables');

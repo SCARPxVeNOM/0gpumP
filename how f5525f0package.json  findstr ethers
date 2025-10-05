@@ -1,0 +1,58 @@
+[33mcommit f5525f07b976c5eb9c989bbeaa41e9736da443cc[m
+Author: Aryan Anand <pratikkumar56778@gmail.com>
+Date:   Mon Oct 6 04:12:23 2025 +0530
+
+     Update to 0G SDK 0.3.1 and Galileo testnet
+    
+    - Updated @0glabs/0g-ts-sdk to v0.3.1
+    - Upgraded ethers to v6.13.1 for compatibility
+    - Updated Hardhat config for ethers v6
+    - Deployed contracts on Galileo testnet (Chain ID: 16602)
+    - Updated all network references from 0g-testnet to 0g-galileo-testnet
+    - Fixed deployment scripts for new SDK version
+    - Updated render.yaml and fly.backend.toml with new contract addresses
+    - Removed 0G Compute functionality as requested
+    - Updated storage kit to use environment variables
+    - Fixed all ethers v6 compatibility issues
+    
+    Deployed contracts:
+    - Factory: 0xA01CD368F39956ce09e538ed731D685b60Ea68eb
+    - Router: 0x1Aa3fCC63f08103b20d8F34BaD6aE59dc6B10e45
+    - WETH: 0x0Bd71a034D5602014206B965677E83C6484561F2
+
+.env
+.env.local
+0g-storage-integration-guide.md
+0g-storage-ts-starter-kit/package-lock.json
+0g-storage-ts-starter-kit/package.json
+0g-storage-ts-starter-kit/src/index.ts
+app/advanced/page.tsx
+app/api/ai/suggestions/route.ts
+app/components/ZgStorageDemo.tsx
+app/hooks/useEthers.ts
+app/hooks/useFileDownload.ts
+app/hooks/useFileUpload.ts
+app/providers/ZgStorageProvider.tsx
+compute-runtime/broker.js
+compute-runtime/package-lock.json
+compute-runtime/package.json
+data/coins.db-shm
+data/coins.db-wal
+deployment-config.json
+deployments/app-factory-0g-galileo-testnet.json
+env.example
+fly.backend.toml
+hardhat.config.js
+lib/rpc-config.ts
+lib/trading-config.ts
+package-lock.json
+package.json
+render.yaml
+scripts/deployAppFactory.js
+scripts/deployBondingCurve.js
+scripts/deployCoreDEX.js
+scripts/deployTokenFactory.js
+scripts/findTokensFromStorage.js
+scripts/quickDeploy.js
+server.js
+server/.env
