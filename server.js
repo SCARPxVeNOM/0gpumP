@@ -635,7 +635,18 @@ async function getTokenSuggestionsUsing0G(tokens) {
 
   const prompt = `Analyze tokens and return top 3 suggestions for new investors as JSON array [{name, reason, risk_level}]. Data: ${JSON.stringify(tokens.slice(0,25))}`;
   const messages = [{ role: 'user', content: prompt }];
-  const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
+  let headers = null;
+  try {
+    headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
+  } catch (e) {
+    console.warn('[AI] getRequestHeaders failed (suggestions), falling back:', e?.message || e)
+    const scored = tokens.map(t => ({
+      name: t.name || t.symbol,
+      score: (Number(t.volume || 0) * 0.6) + (Number(t.holders || 0) * 0.4) + (Number(t.liquidity || 0) * 0.2),
+      reason: `Volume ${t.volume || 0}, holders ${t.holders || 0}, liquidity ${t.liquidity || 0}`
+    })).sort((a,b) => b.score - a.score).slice(0,3);
+    return scored.map(s => ({ name: s.name, reason: s.reason, risk_level: 'medium' }));
+  }
   try {
     const r = await fetch(`${endpoint}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ messages, model }) });
     const j = await r.json();
@@ -695,7 +706,13 @@ async function getTrendingTopicsUsing0G() {
   }
   const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
   const messages = [{ role: 'user', content: 'List 10 trending internet topics for memecoin creation as JSON array of strings.' }];
-  const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
+  let headers = null;
+  try {
+    headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
+  } catch (e) {
+    console.warn('[AI] getRequestHeaders failed (topics), returning static list:', e?.message || e)
+    return ['AI Agents', 'DeFi 2.0', 'Onchain Gaming', 'RWA', 'Memes x AI', 'Bitcoin L2', 'SocialFi', 'Cross-chain', '0G Storage', 'Decentralized Compute'];
+  }
   try {
     const r = await fetch(`${endpoint}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ messages, model }) });
     const j = await r.json();
