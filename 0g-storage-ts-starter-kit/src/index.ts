@@ -121,13 +121,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     console.log(`⛽ Gas Price: ${GAS_PRICE} wei (${parseInt(GAS_PRICE) / 1e9} Gwei)`);
     console.log(`⛽ Max Gas Limit: ${MAX_GAS_LIMIT} gas`);
     
-    // Upload file with 0.3.1 API syntax and custom gas settings
-    const uploadOptions = {
-      gasPrice: GAS_PRICE,
-      gasLimit: MAX_GAS_LIMIT
-    };
-    
-    const [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer as any, uploadOptions);
+    // Upload file with 0.3.1 API syntax (no custom gas options for now)
+    const [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer as any);
 
     if (uploadErr !== null) {
       throw new Error(`Upload error: ${uploadErr}`);
@@ -138,7 +133,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
     // Wait for transaction confirmation
     try {
-      const receipt = await provider.waitForTransaction(tx, 1, 60000); // 60 second timeout
+      const receipt = await provider.waitForTransaction(tx as string, 1, 60000); // 60 second timeout
       if (receipt && receipt.status === 1) {
         console.log(`✅ Transaction confirmed in block ${receipt.blockNumber}`);
       } else {
@@ -152,7 +147,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 
     res.json({
       rootHash: tree?.rootHash() ?? '',
-      transactionHash: tx
+      transactionHash: tx as string
     });
   } catch (error) {
     console.error('Upload error:', error);
