@@ -1561,6 +1561,24 @@ app.get("/trading/history/:userAddress", async (req, res) => {
   }
 });
 
+app.post("/trading/record", async (req, res) => {
+  try {
+    const transactionData = req.body;
+    
+    // Validate required fields
+    if (!transactionData.coinId || !transactionData.userAddress || !transactionData.txHash) {
+      return res.status(400).json({ error: "Missing required fields: coinId, userAddress, txHash" });
+    }
+    
+    await dataService.addTradingTransaction(transactionData);
+    
+    res.json({ success: true, message: "Trading transaction recorded" });
+  } catch (error) {
+    console.error("Record trading transaction error:", error);
+    res.status(500).json({ error: "Failed to record trading transaction" });
+  }
+});
+
 app.get("/trading/coin/:coinId", async (req, res) => {
   try {
     const { coinId } = req.params;

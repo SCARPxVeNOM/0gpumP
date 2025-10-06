@@ -194,6 +194,30 @@ export class NewBondingCurveTradingService {
       const tx = await curve.buy(minTokensOutWei, deadline, { value: ogAmountWei })
       const receipt = await tx.wait()
       
+      // Record trading transaction
+      try {
+        const userAddress = await this.signer.getAddress()
+        const curveInfo = await this.getCurveInfo(curveAddress)
+        if (curveInfo) {
+          await this.recordTradingTransaction({
+            coinId: curveInfo.tokenAddress, // Use token address as coinId
+            userAddress,
+            txHash: receipt.transactionHash,
+            blockNumber: receipt.blockNumber,
+            timestamp: Math.floor(Date.now() / 1000),
+            type: 'buy',
+            amount: minTokensOut,
+            amountOg: parseFloat(ogAmount),
+            price: parseFloat(ogAmount) / parseFloat(minTokensOut),
+            volume: parseFloat(ogAmount),
+            gasUsed: receipt.gasUsed?.toString() || '0',
+            gasPrice: receipt.gasPrice?.toString() || '0'
+          })
+        }
+      } catch (recordError) {
+        console.warn('Failed to record trading transaction:', recordError)
+      }
+      
       return {
         success: true,
         txHash: receipt.transactionHash
@@ -234,6 +258,27 @@ export class NewBondingCurveTradingService {
       const tx = await curve.sell(tokenAmountWei, minOgOutWei, deadline) // FIXED: Use minOgOutWei
       const receipt = await tx.wait()
       
+      // Record trading transaction
+      try {
+        const userAddress = await this.signer.getAddress()
+        await this.recordTradingTransaction({
+          coinId: curveInfo.tokenAddress, // Use token address as coinId
+          userAddress,
+          txHash: receipt.transactionHash,
+          blockNumber: receipt.blockNumber,
+          timestamp: Math.floor(Date.now() / 1000),
+          type: 'sell',
+          amount: tokenAmount,
+          amountOg: parseFloat(minOgOut),
+          price: parseFloat(minOgOut) / parseFloat(tokenAmount),
+          volume: parseFloat(minOgOut),
+          gasUsed: receipt.gasUsed?.toString() || '0',
+          gasPrice: receipt.gasPrice?.toString() || '0'
+        })
+      } catch (recordError) {
+        console.warn('Failed to record trading transaction:', recordError)
+      }
+      
       return {
         success: true,
         txHash: receipt.transactionHash
@@ -271,6 +316,35 @@ export class NewBondingCurveTradingService {
     } catch (error) {
       console.error('Error getting native balance:', error)
       return '0'
+    }
+  }
+
+  // Record trading transaction to backend
+  private async recordTradingTransaction(transactionData: {
+    coinId: string
+    userAddress: string
+    txHash: string
+    blockNumber: number
+    timestamp: number
+    type: 'buy' | 'sell'
+    amount: string
+    amountOg: number
+    price: number
+    volume: number
+    gasUsed: string
+    gasPrice: string
+  }) {
+    try {
+      const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000'
+      await fetch(`${backendBase}/trading/record`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(transactionData)
+      })
+    } catch (error) {
+      console.error('Failed to record trading transaction:', error)
     }
   }
 }

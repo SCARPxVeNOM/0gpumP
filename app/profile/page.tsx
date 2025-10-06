@@ -167,16 +167,21 @@ export default function ProfilePage() {
           const trades = hist.history || []
           const totalTrades = trades.length
           const totalVolume = trades.reduce((acc: number, t: any) => acc + (Number(t.amountOg || 0)), 0)
+          
+          console.log(`Profile enrichment: Found ${totalTrades} trades, total volume: ${totalVolume} OG for wallet ${userAddress}`)
+          
           const updatedStats = {
             ...completeProfile.tradingStats,
             totalTrades,
             totalVolume,
             // tokensHeld would require per-token balance; keep existing for now
-            lastTradeAt: totalTrades > 0 ? new Date(trades[0].timestamp || Date.now()).toISOString() : completeProfile.tradingStats.lastTradeAt
+            lastTradeAt: totalTrades > 0 ? new Date(trades[0].timestamp * 1000).toISOString() : completeProfile.tradingStats.lastTradeAt
           }
           const updated = { ...completeProfile, tradingStats: updatedStats }
           setProfile(updated)
           await userProfileManager.updateProfile(userAddress, { tradingStats: updatedStats })
+        } else {
+          console.warn(`Failed to fetch trading history for ${userAddress}:`, histRes.status, histRes.statusText)
         }
       } catch (enrichErr) {
         console.warn('Profile enrichment skipped:', (enrichErr as any)?.message || enrichErr)

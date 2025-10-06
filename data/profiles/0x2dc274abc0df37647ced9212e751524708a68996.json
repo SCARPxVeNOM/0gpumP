@@ -1,9 +1,9 @@
 {
-  "profileHash": "local:C:\\Users\\aryan\\Desktop\\0gPump\\data\\profiles\\0x2dc274abc0df37647ced9212e751524708a68996.json",
-  "avatarUrl": "http://localhost:3000/download/0xb6a1e6fdd3c949d025aa8de89915c9712735d2d66407899c2324c0b5de1359e2",
-  "updatedAt": "2025-09-02T13:26:37.136Z",
-  "username": "TEST",
-  "bio": "TEST🚀",
+  "profileHash": "0xb8886889fba0419a400cdb1ca309b4203e99f044ded68a917686ae7762aa1637",
+  "avatarUrl": "/download/0xb0bf993605d81052137b5eaebf60206ae2aa38af17dd0a905b8c13396517ecba",
+  "updatedAt": "2025-10-06T21:15:52.051Z",
+  "username": "aryan",
+  "bio": "Welcome to OG Pump! 🚀",
   "preferences": {
     "theme": "light",
     "notifications": true,
