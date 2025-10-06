@@ -46,6 +46,7 @@ const tempCache = new Map();
 // 0G Compute AI suggestions cache
 // -----------------------------
 let aiCache = { suggestions: null, suggestionsExpiry: 0, topics: null, topicsExpiry: 0 };
+const acknowledgedProviders = new Set();
 const AI_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // -----------------------------
@@ -615,7 +616,21 @@ async function getTokenSuggestionsUsing0G(tokens) {
 
   // Example provider (deepseek-r1-70b)
   const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
-  await broker.inference.acknowledgeProviderSigner(providerAddress);
+  if (!acknowledgedProviders.has(providerAddress)) {
+    try {
+      await broker.inference.acknowledgeProviderSigner(providerAddress);
+      acknowledgedProviders.add(providerAddress);
+    } catch (e) {
+      const msg = String(e?.message || '');
+      // Ignore common replay/known or already acknowledged cases
+      if (msg.includes('already known') || msg.includes('nonce') || msg.includes('known')) {
+        acknowledgedProviders.add(providerAddress);
+        console.warn('[AI] acknowledge skipped:', msg);
+      } else {
+        console.warn('[AI] acknowledge provider error (continuing):', msg);
+      }
+    }
+  }
   const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
 
   const prompt = `Analyze tokens and return top 3 suggestions for new investors as JSON array [{name, reason, risk_level}]. Data: ${JSON.stringify(tokens.slice(0,25))}`;
@@ -664,7 +679,20 @@ async function getTrendingTopicsUsing0G() {
     }
   }
   const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
-  await broker.inference.acknowledgeProviderSigner(providerAddress);
+  if (!acknowledgedProviders.has(providerAddress)) {
+    try {
+      await broker.inference.acknowledgeProviderSigner(providerAddress);
+      acknowledgedProviders.add(providerAddress);
+    } catch (e) {
+      const msg = String(e?.message || '');
+      if (msg.includes('already known') || msg.includes('nonce') || msg.includes('known')) {
+        acknowledgedProviders.add(providerAddress);
+        console.warn('[AI] acknowledge skipped:', msg);
+      } else {
+        console.warn('[AI] acknowledge provider error (continuing):', msg);
+      }
+    }
+  }
   const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
   const messages = [{ role: 'user', content: 'List 10 trending internet topics for memecoin creation as JSON array of strings.' }];
   const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
