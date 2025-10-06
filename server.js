@@ -37,9 +37,52 @@ const FACTORY_ABI = [
 // Temporary cache for file content hashing
 const tempCache = new Map();
 
+// -----------------------------
+// Dialogue storage (walletAddress -> rootHash) persistence
+// -----------------------------
+const DIALOGUE_MAP_FILE = path.join(process.cwd(), 'data', 'dialogue-map.json');
+let dialogueMap = new Map();
+
+function ensureDataDir() {
+  const dataDir = path.join(process.cwd(), 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+}
+
+async function loadDialogueMap() {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(DIALOGUE_MAP_FILE)) {
+      const raw = fs.readFileSync(DIALOGUE_MAP_FILE, 'utf8');
+      const obj = JSON.parse(raw || '{}');
+      dialogueMap = new Map(Object.entries(obj));
+      console.log(`🗺️  Dialogue map loaded (${dialogueMap.size} entries)`);
+    } else {
+      dialogueMap = new Map();
+      console.log('ℹ️  No existing dialogue map found. A new one will be created.');
+    }
+  } catch (e) {
+    console.warn('⚠️ Failed to load dialogue map:', e?.message || e);
+    dialogueMap = new Map();
+  }
+}
+
+async function saveDialogueMap() {
+  try {
+    ensureDataDir();
+    const obj = Object.fromEntries(dialogueMap);
+    fs.writeFileSync(DIALOGUE_MAP_FILE, JSON.stringify(obj, null, 2));
+  } catch (e) {
+    console.warn('⚠️ Failed to save dialogue map:', e?.message || e);
+  }
+}
+
 // Helper: Direct POST to 0G kit upload (no retry)
 import http from "http";
 import https from "https";
+import { Indexer, ZgFile } from "@0glabs/0g-ts-sdk";
+import os from "os";
 
 async function postToOGStorage(url, formData, headers, timeoutMs = 60000) {
   return await axios.post(url, formData, {
@@ -61,6 +104,31 @@ async function initializeDatabase() {
   } catch (error) {
     console.error("❌ Database initialization failed:", error);
     throw error;
+  }
+}
+
+// -----------------------------
+// Direct SDK (optional) uploader context
+// -----------------------------
+let ogIndexer = null;
+let ogProvider = null;
+let ogSigner = null;
+async function initializeOGSdkOnce() {
+  if (ogIndexer) return;
+  const RPC_URL = process.env.RPC_URL || process.env.OG_RPC || 'https://evmrpc-testnet.0g.ai';
+  const INDEXER_RPC = process.env.INDEXER_RPC || 'https://indexer-storage-testnet-turbo.0g.ai';
+  const PRIVATE_KEY = process.env.PRIVATE_KEY;
+  if (!PRIVATE_KEY) {
+    console.warn('⚠️ Direct SDK upload not available: PRIVATE_KEY missing');
+    return;
+  }
+  try {
+    ogIndexer = new Indexer(INDEXER_RPC);
+    ogProvider = new ethers.JsonRpcProvider(RPC_URL);
+    ogSigner = new ethers.Wallet(PRIVATE_KEY, ogProvider);
+    console.log('✅ 0G SDK context initialized (direct upload)');
+  } catch (e) {
+    console.warn('⚠️ Failed to init 0G SDK context:', e?.message || e);
   }
 }
 
@@ -111,6 +179,85 @@ app.get('/', (_req, res) => {
   res.send('0G Pump backend is running');
 });
 
+/**
+ * DIALOGUE ENDPOINTS (similar to 0g_storage_service)
+ */
+app.get('/dialogue/:walletAddress', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    await loadDialogueMap();
+    const rootHash = dialogueMap.get(walletAddress);
+    if (!rootHash) return res.status(404).json({ message: 'No dialogue history found.' });
+
+    // Download JSON via OG storage proxy
+    console.log(`📥 Downloading dialogue for ${walletAddress} (root: ${rootHash})`);
+    const response = await axios.get(`${OG_STORAGE_API}/download/${rootHash}`, { timeout: 60000, responseType: 'json' });
+    if (!response.data || typeof response.data !== 'object') {
+      return res.status(404).json({ message: 'No dialogue history found.' });
+    }
+    return res.json(response.data);
+  } catch (e) {
+    console.error('Error getting dialogue:', e?.message || e);
+    return res.status(500).json({ message: 'Failed to retrieve dialogue history.' });
+  }
+});
+
+app.post('/dialogue/:walletAddress', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const { newDialogue } = req.body || {};
+    if (!newDialogue) return res.status(400).json({ message: "Missing 'newDialogue' in request body." });
+
+    // Fetch existing history if any
+    let existing = null;
+    try {
+      const rootHash = (await loadDialogueMap(), dialogueMap.get(walletAddress));
+      if (rootHash) {
+        const resp = await axios.get(`${OG_STORAGE_API}/download/${rootHash}`, { timeout: 60000, responseType: 'json' });
+        existing = resp.data;
+      }
+    } catch {}
+
+    const parsed = existing && existing.dialogue_history ? existing : { dialogue_history: [] };
+    const dialogueObj = typeof newDialogue === 'string' ? JSON.parse(newDialogue) : newDialogue;
+    parsed.dialogue_history.push({ ...dialogueObj, timestamp: new Date().toISOString() });
+
+    // Upload merged JSON
+    const formData = new FormData();
+    formData.append('file', Buffer.from(JSON.stringify(parsed, null, 2)), { filename: 'dialogue.json', contentType: 'application/json' });
+    const uploadResp = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+    const newRoot = uploadResp.data.rootHash;
+    dialogueMap.set(walletAddress, newRoot);
+    await saveDialogueMap();
+
+    return res.status(200).json({ message: 'Dialogue saved successfully.', rootHash: newRoot });
+  } catch (e) {
+    console.error('Error saving dialogue:', e?.message || e);
+    return res.status(500).json({ message: 'Failed to save dialogue.' });
+  }
+});
+
+app.post('/dialogue/history/:walletAddress', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const fullHistory = req.body;
+    if (!fullHistory || !fullHistory.dialogue_history) {
+      return res.status(400).json({ message: "Missing 'dialogue_history' object in request body." });
+    }
+
+    const formData = new FormData();
+    formData.append('file', Buffer.from(JSON.stringify(fullHistory, null, 2)), { filename: 'dialogue.json', contentType: 'application/json' });
+    const uploadResp = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+    const newRoot = uploadResp.data.rootHash;
+    dialogueMap.set(walletAddress, newRoot);
+    await saveDialogueMap();
+
+    return res.status(200).json({ message: 'Full dialogue history saved successfully.', rootHash: newRoot });
+  } catch (e) {
+    console.error('Error saving full history:', e?.message || e);
+    return res.status(500).json({ message: 'Failed to save full dialogue history.' });
+  }
+});
 /**
  * UPLOAD ENDPOINT - Enhanced with Professional Architecture
  */
@@ -287,6 +434,45 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   } catch (err) {
     console.error("Upload error:", err);
     res.status(500).json({ error: err.message || "Upload failed" });
+  }
+});
+
+// ---------------------------------
+// Direct SDK image upload (coin image, etc.)
+// POST /upload-image-direct (multipart 'file')
+// Returns: { success, rootHash, txHash }
+// ---------------------------------
+app.post('/upload-image-direct', upload.single('file'), async (req, res) => {
+  try {
+    await initializeOGSdkOnce();
+    if (!ogIndexer || !ogSigner) {
+      return res.status(503).json({ success: false, error: 'Direct SDK upload not configured' });
+    }
+    const file = req.file;
+    if (!file) return res.status(400).json({ success: false, error: 'No file provided' });
+
+    // Write temp file
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), '0g-upload-'));
+    const tempFile = path.join(tempDir, file.originalname || `upload-${Date.now()}`);
+    fs.writeFileSync(tempFile, file.buffer);
+
+    try {
+      const zgFile = await ZgFile.fromFilePath(tempFile);
+      const [tree, treeErr] = await zgFile.merkleTree();
+      if (treeErr) throw new Error(`Merkle tree failed: ${treeErr}`);
+      const [tx, uploadErr] = await ogIndexer.upload(zgFile, ogProvider.connection.url || '', ogSigner);
+      if (uploadErr) throw new Error(String(uploadErr));
+      const rootHash = tree.rootHash();
+      await zgFile.close();
+      try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {}
+      return res.json({ success: true, rootHash, txHash: tx.hash || tx });
+    } catch (e) {
+      try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {}
+      throw e;
+    }
+  } catch (e) {
+    console.error('Direct SDK upload error:', e);
+    return res.status(500).json({ success: false, error: e?.message || 'Upload failed' });
   }
 });
 
@@ -1124,6 +1310,8 @@ app.listen(PORT, () => {
   console.log(`📤 Upload endpoint: POST /upload`);
   console.log(`📥 Download endpoint: GET /download/:rootHash`);
   console.log(`🪙 Create coin: POST /createCoin`);
+  console.log(`🗣️ Dialogue endpoints: GET/POST /dialogue/:walletAddress, POST /dialogue/history/:walletAddress`);
+  console.log(`🖼️ Direct SDK image upload: POST /upload-image-direct`);
       console.log(`👤 Profile endpoints: GET/PUT /profile/:walletAddress`);
       console.log(`📊 Market data: GET /market/stats`);
   console.log(`💚 Health check: GET /health`);
