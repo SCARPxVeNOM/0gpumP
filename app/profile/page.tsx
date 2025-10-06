@@ -131,6 +131,56 @@ export default function ProfilePage() {
         showTradingStats: completeProfile.preferences.showTradingStats,
         notifications: completeProfile.preferences.notifications
       })
+
+      // Enrich from backend: tokens created + trading stats unique to this wallet
+      try {
+        const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
+
+        // Fetch coins created by this wallet
+        const coinsRes = await fetch(`${backendBase}/coins?limit=200&offset=0&sortBy=createdAt&order=DESC`, { cache: 'no-store' })
+        if (coinsRes.ok) {
+          const coinsData = await coinsRes.json()
+          const myCoins = (coinsData.coins || []).filter((c: any) => String(c.creator).toLowerCase() === String(userAddress).toLowerCase())
+          const tokensCreated = myCoins.map((c: any) => ({
+            tokenAddress: c.tokenAddress || '',
+            tokenName: c.name,
+            tokenSymbol: c.symbol,
+            curveAddress: c.curveAddress || undefined,
+            createdAt: new Date(c.createdAt).toISOString(),
+            txHash: c.txHash || `local-${Date.now()}`,
+            imageUrl: c.imageUrl || (c.imageHash ? `${backendBase}/download/${c.imageHash}` : undefined),
+            description: c.description || undefined
+          }))
+
+          // Only update if different
+          if (JSON.stringify(tokensCreated) !== JSON.stringify(completeProfile.tokensCreated)) {
+            const updated = { ...completeProfile, tokensCreated }
+            setProfile(updated)
+            await userProfileManager.updateProfile(userAddress, { tokensCreated })
+          }
+        }
+
+        // Fetch trading history to compute stats
+        const histRes = await fetch(`${backendBase}/trading/history/${userAddress}?limit=500&offset=0`, { cache: 'no-store' })
+        if (histRes.ok) {
+          const hist = await histRes.json()
+          const trades = hist.history || []
+          const totalTrades = trades.length
+          const totalVolume = trades.reduce((acc: number, t: any) => acc + (Number(t.amountOg || 0)), 0)
+          const updatedStats = {
+            ...completeProfile.tradingStats,
+            totalTrades,
+            totalVolume,
+            // tokensHeld would require per-token balance; keep existing for now
+            lastTradeAt: totalTrades > 0 ? new Date(trades[0].timestamp || Date.now()).toISOString() : completeProfile.tradingStats.lastTradeAt
+          }
+          const updated = { ...completeProfile, tradingStats: updatedStats }
+          setProfile(updated)
+          await userProfileManager.updateProfile(userAddress, { tradingStats: updatedStats })
+        }
+      } catch (enrichErr) {
+        console.warn('Profile enrichment skipped:', (enrichErr as any)?.message || enrichErr)
+      }
     } catch (error: any) {
       console.error('Error loading profile:', error)
       setError(error.message || 'Failed to load profile')
