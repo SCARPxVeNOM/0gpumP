@@ -59,6 +59,45 @@ export default function AiSuggestionsPage() {
           )}
         </div>
       </div>
+
+      {/* FAQ Section */}
+      <div className="mt-6 bg-slate-50 border-4 border-black rounded-2xl p-4 shadow-[6px_6px_0_#000]">
+        <h3 className="text-xl font-extrabold mb-4">❓ Platform FAQs</h3>
+        <div className="space-y-3">
+          <details className="border-2 border-black rounded-lg bg-white p-3">
+            <summary className="font-bold cursor-pointer">What chain and gas token does OG Pump use?</summary>
+            <p className="mt-2 text-sm">We run on the 0G Galileo testnet. Transactions use OG as gas. Set your wallet RPC to https://evmrpc-testnet.0g.ai.</p>
+          </details>
+          <details className="border-2 border-black rounded-lg bg-white p-3">
+            <summary className="font-bold cursor-pointer">How much gas does creating a token cost?</summary>
+            <p className="mt-2 text-sm">Typical token creation is a few hundred thousand gas. Expect cents on testnet. Trading calls add standard swap costs.</p>
+          </details>
+          <details className="border-2 border-black rounded-lg bg-white p-3">
+            <summary className="font-bold cursor-pointer">Where is token media stored?</summary>
+            <p className="mt-2 text-sm">Images/metadata are uploaded to 0G Storage via the official SDK. We also cache uploads for instant serving.</p>
+          </details>
+          <details className="border-2 border-black rounded-lg bg-white p-3">
+            <summary className="font-bold cursor-pointer">How does liquidity work?</summary>
+            <p className="mt-2 text-sm">New tokens are paired with a bonding curve contract. Prices are algorithmically set by reserves; buys add OG, sells remove OG.</p>
+          </details>
+          <details className="border-2 border-black rounded-lg bg-white p-3">
+            <summary className="font-bold cursor-pointer">Why do I see “no trading enabled” sometimes?</summary>
+            <p className="mt-2 text-sm">If the PairCreated event is delayed, our backend resolves it and updates the DB. Refresh in ~30s or use the Resolve Pair tool.</p>
+          </details>
+          <details className="border-2 border-black rounded-lg bg-white p-3">
+            <summary className="font-bold cursor-pointer">What models power AI suggestions?</summary>
+            <p className="mt-2 text-sm">0G Compute providers (e.g., deepseek-r1-70b). If a node is unavailable, we show heuristic suggestions and a static topic list.</p>
+          </details>
+          <details className="border-2 border-black rounded-lg bg-white p-3">
+            <summary className="font-bold cursor-pointer">How is my data cached?</summary>
+            <p className="mt-2 text-sm">Server-side in-memory caching (5 min TTL) for suggestions/topics; coins are stored in SQLite with a small cache layer.</p>
+          </details>
+          <details className="border-2 border-black rounded-lg bg-white p-3">
+            <summary className="font-bold cursor-pointer">Where can I report issues?</summary>
+            <p className="mt-2 text-sm">Use the Support section or open an issue on the GitHub repo. Include the token symbol/tx hash and a screenshot.</p>
+          </details>
+        </div>
+      </div>
     </div>
   )
 }
