@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
-import { ethers } from 'ethers'
+import { BrowserProvider } from 'ethers'
 import { userProfileManager, UserProfile, TokenCreated } from '../../lib/userProfileManager'
 import { 
   User, 
@@ -63,8 +63,8 @@ export default function ProfilePage() {
       const eth = (typeof window !== 'undefined') ? (window as any).ethereum : undefined
       if (!eth) return
 
-      const provider = new ethers.providers.Web3Provider(eth, 'any')
-      const signer = provider.getSigner()
+      const provider = new BrowserProvider(eth)
+      const signer = await provider.getSigner()
       
       await userProfileManager.initialize(signer)
       await loadProfile()
