@@ -247,6 +247,52 @@ See [DEPLOY.md](DEPLOY.md) for detailed deployment instructions.
 docker-compose up --build
 ```
 
+## 🤖 AI Suggestions (0G Compute)
+
+This project integrates 0G Compute to generate AI Token Suggestions and Trending Topics for new coin ideas.
+
+### How it works
+- Backend initializes a 0G Compute broker with your signer wallet
+- A provider (e.g., deepseek-r1-70b) is acknowledged on-chain
+- The backend requests model output and returns suggestions to the UI
+- If the compute node is unavailable, the backend returns safe fallbacks so your UI always displays data
+
+### Endpoints
+- `GET /ai-suggestions` – AI-curated suggestions based on coins in the database
+- `GET /trending-topics` – Trending internet topics for coin ideas
+- `POST /ai-setup` – One-time helper to create/fund the compute ledger and acknowledge the provider
+
+### Env requirements (backend)
+```env
+PRIVATE_KEY=your_funded_testnet_key   # used by the broker
+OG_RPC=https://evmrpc-testnet.0g.ai   # 0G EVM RPC
+```
+
+### One-time setup
+```bash
+# Make sure the backend is running on port 4000
+curl -X POST http://localhost:4000/ai-setup
+```
+Output includes current balance and the provider’s endpoint/model.
+
+### Frontend usage
+The Next.js page `/ai-suggestions` calls the backend endpoints and renders both sections.
+
+## 🧰 Troubleshooting
+
+- "Account does not exist. Please create an account first" – Run `POST /ai-setup` after funding your `PRIVATE_KEY` with a small amount of OG on testnet (≥ 0.05 OG recommended).
+- "already known" or nonce errors when acknowledging provider – The backend now caches acknowledgments and ignores benign replays.
+- Empty UI for suggestions/topics – The backend returns non-empty fallbacks; hard refresh and ensure `NEXT_PUBLIC_BACKEND_URL` points to your backend.
+
+## ❓ FAQs
+
+- **What chain and gas token are used?** 0G Galileo testnet; gas token is OG. RPC: `https://evmrpc-testnet.0g.ai`.
+- **How much does token creation cost?** A few hundred thousand gas (varies by network conditions); testnet cost is negligible.
+- **Where are token images/metadata stored?** On 0G Storage via the official SDK; we also write to a local cache for instant serving.
+- **How does liquidity work?** New tokens start on a bonding curve with algorithmic pricing based on reserves. Buys add OG; sells remove OG.
+- **Why do I see "no trading enabled" sometimes?** When `PairCreated` logs are delayed, the backend resolver updates the DB shortly after. Refresh in ~30s.
+- **Which AI models are used?** 0G Compute providers (e.g., `deepseek-r1-70b`). When unavailable, heuristic fallbacks are used.
+
 ## 🔗 API Endpoints
 
 ### Coins Management
@@ -262,6 +308,11 @@ docker-compose up --build
 ### Storage
 - `POST /api/upload` - Upload image to 0G Storage
 - `GET /api/download/:hash` - Download image from storage
+
+### AI
+- `GET /ai-suggestions` - Get AI token suggestions (0G Compute or fallback)
+- `GET /trending-topics` - Get trending topics
+- `POST /ai-setup` - Initialize compute ledger and acknowledge provider
 
 ## 🧪 Testing
 
