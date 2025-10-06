@@ -17,8 +17,8 @@ const upload = multer({ dest: 'uploads/' });
 const RPC_URL = process.env.RPC_URL || 'https://evmrpc-testnet.0g.ai/';
 const INDEXER_RPC = process.env.INDEXER_RPC || 'https://indexer-storage-testnet-turbo.0g.ai';
 const PRIVATE_KEY = '0x8c6f10acb86aeab293bd60bcf7d0e69f70643f8d219b81b6665885844abc3a9c';
-const GAS_PRICE = process.env.GAS_PRICE || '3000000000'; // 3 Gwei
-const MAX_GAS_LIMIT = process.env.MAX_GAS_LIMIT || '5000000'; // 5M gas (much lower)
+const GAS_PRICE = process.env.GAS_PRICE || '1000000000'; // 1 Gwei (much lower)
+const MAX_GAS_LIMIT = process.env.MAX_GAS_LIMIT || '50000'; // 50K gas (much lower)
 
 if (!PRIVATE_KEY) {
   console.error('❌ Private key not found in environment variables');
