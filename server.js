@@ -37,31 +37,18 @@ const FACTORY_ABI = [
 // Temporary cache for file content hashing
 const tempCache = new Map();
 
-// Helper: POST with retry/backoff for 0G kit upload
+// Helper: Direct POST to 0G kit upload (no retry)
 import http from "http";
 import https from "https";
 
-async function postWithRetry(url, formData, headers, maxRetries = 3, timeoutMs = 60000) {
-  let lastErr;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await axios.post(url, formData, {
-        headers,
-        timeout: timeoutMs,
-        maxRedirects: 5,
-        httpAgent: new http.Agent({ keepAlive: true }),
-        httpsAgent: new https.Agent({ keepAlive: true })
-      });
-    } catch (err) {
-      lastErr = err;
-      if (i < maxRetries - 1) {
-        const delay = Math.pow(2, i) * 1000; // Exponential backoff
-        console.log(`⏳ Retry ${i + 1}/${maxRetries} in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-  }
-  throw lastErr;
+async function postToOGStorage(url, formData, headers, timeoutMs = 60000) {
+  return await axios.post(url, formData, {
+    headers,
+    timeout: timeoutMs,
+    maxRedirects: 5,
+    httpAgent: new http.Agent({ keepAlive: true }),
+    httpsAgent: new https.Agent({ keepAlive: true })
+  });
 }
 
 
@@ -212,7 +199,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       
       let response;
       try {
-        response = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+        response = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
       } catch (uploadError) {
         console.error("0G Storage upload failed:", uploadError.message);
         throw new Error(`0G Storage upload failed: ${uploadError.message}`);
@@ -284,7 +271,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
       const formData = new FormData();
       formData.append('file', Buffer.from(JSON.stringify(data)), { filename: 'metadata.json', contentType: 'application/json' });
       
-      const response = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+      const response = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
       const rootHash = response.data.rootHash;
       
       console.log(`✅ Direct JSON upload successful: ${rootHash}`);
@@ -376,7 +363,7 @@ app.post("/createCoin", upload.single("image"), async (req, res) => {
       const formData = new FormData();
       formData.append('file', outputBuffer, { filename: outName, contentType: outType });
       
-      const response = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+      const response = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
       imageRootHash = response.data.rootHash;
       
       console.log(`✅ Coin image uploaded: ${imageRootHash}`);
@@ -517,7 +504,7 @@ async function saveProfileToOGStorage(walletAddress, profileData) {
       contentType: 'application/json' 
     });
     
-    const response = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+    const response = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
     const rootHash = response.data.rootHash;
     
     console.log(`✅ Profile saved to 0G Storage: ${rootHash}`);
@@ -924,7 +911,7 @@ async function uploadFileToOGStorage(file) {
     const formData = new FormData();
     formData.append('file', outputBuffer, { filename: outName, contentType: outType });
     
-    const response = await postWithRetry(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
+    const response = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
     const rootHash = response.data.rootHash;
     
     console.log(`✅ Avatar upload successful: ${rootHash}`);
