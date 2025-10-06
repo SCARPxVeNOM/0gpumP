@@ -593,15 +593,11 @@ async function getTokenSuggestionsUsing0G(tokens) {
   const wallet = new ethers.Wallet(priv, provider);
   const broker = await createZGComputeNetworkBroker(wallet);
 
-  // Ensure compute account exists
+  // Try to ensure account exists; if API not available, continue and rely on fallback
   try {
     await broker.ledger.getLedger();
   } catch (e) {
-    if (String(e?.message || '').includes('Account does not exist')) {
-      await broker.ledger.addAccount();
-    } else {
-      throw e;
-    }
+    console.warn('[AI] ledger check failed, will use fallback if inference errors:', e?.message || e);
   }
 
   // Example provider (deepseek-r1-70b)
@@ -612,9 +608,22 @@ async function getTokenSuggestionsUsing0G(tokens) {
   const prompt = `Analyze tokens and return top 3 suggestions for new investors as JSON array [{name, reason, risk_level}]. Data: ${JSON.stringify(tokens.slice(0,25))}`;
   const messages = [{ role: 'user', content: prompt }];
   const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
-  const r = await fetch(`${endpoint}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ messages, model }) });
-  const j = await r.json();
-  try { return JSON.parse(j?.choices?.[0]?.message?.content || '[]'); } catch { return []; }
+  try {
+    const r = await fetch(`${endpoint}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ messages, model }) });
+    const j = await r.json();
+    const parsed = JSON.parse(j?.choices?.[0]?.message?.content || '[]');
+    if (Array.isArray(parsed)) return parsed;
+  } catch (e) {
+    // Local heuristic fallback if compute not available
+    console.warn('[AI] Using local heuristic suggestions due to compute error:', e?.message || e);
+    const scored = tokens.map(t => ({
+      name: t.name || t.symbol,
+      score: (Number(t.volume || 0) * 0.6) + (Number(t.holders || 0) * 0.4) + (Number(t.liquidity || 0) * 0.2),
+      reason: `Volume ${t.volume || 0}, holders ${t.holders || 0}, liquidity ${t.liquidity || 0}`
+    })).sort((a,b) => b.score - a.score).slice(0,3);
+    return scored.map(s => ({ name: s.name, reason: s.reason, risk_level: 'medium' }));
+  }
+  return [];
 }
 
 async function getTrendingTopicsUsing0G() {
@@ -624,24 +633,26 @@ async function getTrendingTopicsUsing0G() {
   const provider = new ethers.JsonRpcProvider(ogRpc);
   const wallet = new ethers.Wallet(priv, provider);
   const broker = await createZGComputeNetworkBroker(wallet);
-  // Ensure compute account exists
   try {
     await broker.ledger.getLedger();
   } catch (e) {
-    if (String(e?.message || '').includes('Account does not exist')) {
-      await broker.ledger.addAccount();
-    } else {
-      throw e;
-    }
+    console.warn('[AI] ledger check failed for topics, may fallback:', e?.message || e)
   }
   const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
   await broker.inference.acknowledgeProviderSigner(providerAddress);
   const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
   const messages = [{ role: 'user', content: 'List 10 trending internet topics for memecoin creation as JSON array of strings.' }];
   const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
-  const r = await fetch(`${endpoint}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ messages, model }) });
-  const j = await r.json();
-  try { return JSON.parse(j?.choices?.[0]?.message?.content || '[]'); } catch { return []; }
+  try {
+    const r = await fetch(`${endpoint}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ messages, model }) });
+    const j = await r.json();
+    const parsed = JSON.parse(j?.choices?.[0]?.message?.content || '[]');
+    if (Array.isArray(parsed)) return parsed;
+  } catch (e) {
+    console.warn('[AI] Using static trending topics fallback:', e?.message || e)
+    return ['AI Agents', 'DeFi 2.0', 'Onchain Gaming', 'RWA', 'Memes x AI', 'Bitcoin L2', 'SocialFi', 'Cross-chain', '0G Storage', 'Decentralized Compute'];
+  }
+  return [];
 }
 
 app.get('/ai-suggestions', async (_req, res) => {
