@@ -43,6 +43,12 @@ const NEW_FACTORY_EVENT_ABI = [
 const tempCache = new Map();
 
 // -----------------------------
+// 0G Compute AI suggestions cache
+// -----------------------------
+let aiCache = { suggestions: null, suggestionsExpiry: 0, topics: null, topicsExpiry: 0 };
+const AI_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// -----------------------------
 // Dialogue storage (walletAddress -> rootHash) persistence
 // -----------------------------
 const DIALOGUE_MAP_FILE = path.join(process.cwd(), 'data', 'dialogue-map.json');
@@ -572,6 +578,82 @@ app.get("/download/:rootHash", async (req, res) => {
   } catch (error) {
     console.error("Download error:", error);
     res.status(500).json({ error: "Download failed" });
+  }
+});
+
+// ---------------------------------
+// AI SUGGESTIONS (0G Compute) ROUTES
+// ---------------------------------
+async function getTokenSuggestionsUsing0G(tokens) {
+  const { createZGComputeNetworkBroker } = await import('@0glabs/0g-serving-broker');
+  const ogRpc = process.env.OG_RPC || process.env.RPC_URL || 'https://evmrpc-testnet.0g.ai';
+  const priv = process.env.PRIVATE_KEY;
+  if (!priv) throw new Error('PRIVATE_KEY is required for 0G Compute');
+  const provider = new ethers.JsonRpcProvider(ogRpc);
+  const wallet = new ethers.Wallet(priv, provider);
+  const broker = await createZGComputeNetworkBroker(wallet);
+
+  // Example provider (deepseek-r1-70b)
+  const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
+  await broker.inference.acknowledgeProviderSigner(providerAddress);
+  const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
+
+  const prompt = `Analyze tokens and return top 3 suggestions for new investors as JSON array [{name, reason, risk_level}]. Data: ${JSON.stringify(tokens.slice(0,25))}`;
+  const messages = [{ role: 'user', content: prompt }];
+  const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
+  const r = await fetch(`${endpoint}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ messages, model }) });
+  const j = await r.json();
+  try { return JSON.parse(j?.choices?.[0]?.message?.content || '[]'); } catch { return []; }
+}
+
+async function getTrendingTopicsUsing0G() {
+  const { createZGComputeNetworkBroker } = await import('@0glabs/0g-serving-broker');
+  const ogRpc = process.env.OG_RPC || process.env.RPC_URL || 'https://evmrpc-testnet.0g.ai';
+  const priv = process.env.PRIVATE_KEY;
+  const provider = new ethers.JsonRpcProvider(ogRpc);
+  const wallet = new ethers.Wallet(priv, provider);
+  const broker = await createZGComputeNetworkBroker(wallet);
+  const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
+  await broker.inference.acknowledgeProviderSigner(providerAddress);
+  const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
+  const messages = [{ role: 'user', content: 'List 10 trending internet topics for memecoin creation as JSON array of strings.' }];
+  const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
+  const r = await fetch(`${endpoint}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ messages, model }) });
+  const j = await r.json();
+  try { return JSON.parse(j?.choices?.[0]?.message?.content || '[]'); } catch { return []; }
+}
+
+app.get('/ai-suggestions', async (_req, res) => {
+  try {
+    const now = Date.now();
+    if (aiCache.suggestions && aiCache.suggestionsExpiry > now) {
+      return res.json({ suggestions: aiCache.suggestions, cached: true });
+    }
+    const coins = await dataService.getCoins(100, 0, 'createdAt', 'DESC');
+    const tokens = coins.map(c => ({ name: c.name || c.symbol, symbol: c.symbol, volume: c.volume24h || 0, holders: c.holders || 0, liquidity: c.liquidity || 0, price: c.price || 0 }));
+    const suggestions = await getTokenSuggestionsUsing0G(tokens);
+    aiCache.suggestions = suggestions;
+    aiCache.suggestionsExpiry = now + AI_TTL_MS;
+    res.json({ suggestions });
+  } catch (e) {
+    console.error('AI suggestions failed', e);
+    res.status(500).json({ error: 'AI suggestion failed' });
+  }
+});
+
+app.get('/trending-topics', async (_req, res) => {
+  try {
+    const now = Date.now();
+    if (aiCache.topics && aiCache.topicsExpiry > now) {
+      return res.json({ topics: aiCache.topics, cached: true });
+    }
+    const topics = await getTrendingTopicsUsing0G();
+    aiCache.topics = topics;
+    aiCache.topicsExpiry = now + AI_TTL_MS;
+    res.json({ topics });
+  } catch (e) {
+    console.error('Trending topics failed', e);
+    res.status(500).json({ error: 'Trending topics failed' });
   }
 });
 
