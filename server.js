@@ -714,6 +714,57 @@ app.get('/trending-topics', async (_req, res) => {
   }
 });
 
+// ---------------------------------
+// AI setup utility: create/fund ledger and acknowledge provider
+// ---------------------------------
+app.post('/ai-setup', async (req, res) => {
+  try {
+    const { createZGComputeNetworkBroker } = await import('@0glabs/0g-serving-broker');
+    const ogRpc = process.env.OG_RPC || process.env.RPC_URL || 'https://evmrpc-testnet.0g.ai';
+    const priv = process.env.PRIVATE_KEY;
+    if (!priv) return res.status(400).json({ success: false, error: 'Missing PRIVATE_KEY' });
+    const provider = new ethers.JsonRpcProvider(ogRpc);
+    const wallet = new ethers.Wallet(priv, provider);
+    const broker = await createZGComputeNetworkBroker(wallet);
+
+    // Ensure ledger exists and has small balance
+    let ledgerCreated = false;
+    try {
+      await broker.ledger.getLedger();
+    } catch (e) {
+      if (String(e?.message || '').includes('Account does not exist')) {
+        await broker.ledger.addLedger(0.05);
+        ledgerCreated = true;
+      } else {
+        throw e;
+      }
+    }
+    const account = await broker.ledger.getLedger();
+
+    // Acknowledge default provider (deepseek-r1-70b)
+    const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
+    try {
+      await broker.inference.acknowledgeProviderSigner(providerAddress);
+    } catch (e) {
+      // If already acknowledged or reverts, continue
+      console.warn('[AI] acknowledgeProviderSigner warning:', e?.message || e);
+    }
+    const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
+
+    return res.json({
+      success: true,
+      ledgerCreated,
+      balanceOG: ethers.formatEther(account.totalBalance),
+      providerAddress,
+      endpoint,
+      model
+    });
+  } catch (e) {
+    console.error('AI setup failed:', e);
+    return res.status(500).json({ success: false, error: e?.message || 'AI setup failed' });
+  }
+});
+
 /**
  * CREATE COIN ENDPOINT - Enhanced with Professional Architecture
  */
