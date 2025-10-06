@@ -593,6 +593,17 @@ async function getTokenSuggestionsUsing0G(tokens) {
   const wallet = new ethers.Wallet(priv, provider);
   const broker = await createZGComputeNetworkBroker(wallet);
 
+  // Ensure compute account exists
+  try {
+    await broker.ledger.getLedger();
+  } catch (e) {
+    if (String(e?.message || '').includes('Account does not exist')) {
+      await broker.ledger.addAccount();
+    } else {
+      throw e;
+    }
+  }
+
   // Example provider (deepseek-r1-70b)
   const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
   await broker.inference.acknowledgeProviderSigner(providerAddress);
@@ -613,6 +624,16 @@ async function getTrendingTopicsUsing0G() {
   const provider = new ethers.JsonRpcProvider(ogRpc);
   const wallet = new ethers.Wallet(priv, provider);
   const broker = await createZGComputeNetworkBroker(wallet);
+  // Ensure compute account exists
+  try {
+    await broker.ledger.getLedger();
+  } catch (e) {
+    if (String(e?.message || '').includes('Account does not exist')) {
+      await broker.ledger.addAccount();
+    } else {
+      throw e;
+    }
+  }
   const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
   await broker.inference.acknowledgeProviderSigner(providerAddress);
   const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
