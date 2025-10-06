@@ -58,9 +58,9 @@ export class NewBondingCurveTradingService {
   private provider: BrowserProvider | null = null
   private signer: any = null
 
-  initialize(provider: BrowserProvider) {
+  async initialize(provider: BrowserProvider) {
     this.provider = provider
-    this.signer = provider.getSigner()
+    this.signer = await provider.getSigner()
   }
 
   // Get curve information

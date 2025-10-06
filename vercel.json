@@ -18,7 +18,7 @@
   "env": {
     "NEXT_PUBLIC_EVM_RPC": "https://evmrpc-testnet.0g.ai",
     "NEXT_PUBLIC_BACKEND_URL": "https://zerogpump-backend.onrender.com",
-    "NEXT_PUBLIC_FACTORY_ADDRESS": "0x8A1173808F4BF4A35EBb9e6BAFe91E96B2bCc93c",
+    "NEXT_PUBLIC_FACTORY_ADDRESS": "0x560C7439E28359E2E8C0D72A52e8b5d6645766e7",
     "NEXT_PUBLIC_OG_STORAGE_ENDPOINT": "https://zerog-storage-kit.onrender.com"
   }
 }

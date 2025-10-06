@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useAccount } from 'wagmi'
-import { ethers } from 'ethers'
+import { BrowserProvider } from 'ethers'
 import { newFactoryService } from '../../lib/newFactoryService'
 import { newBondingCurveTradingService } from '../../lib/newBondingCurveTradingService'
 
@@ -42,9 +42,9 @@ export default function TestNewCurve() {
         return
       }
       
-      const provider = new ethers.providers.Web3Provider(eth, 'any')
-      newFactoryService.initialize(provider, factoryAddress)
-      newBondingCurveTradingService.initialize(provider)
+      const provider = new BrowserProvider(eth)
+      await newFactoryService.initialize(provider as any, factoryAddress)
+      await newBondingCurveTradingService.initialize(provider)
       
       const info = await newFactoryService.getFactoryInfo()
       console.log('Factory info:', info)

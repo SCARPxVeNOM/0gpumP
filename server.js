@@ -28,10 +28,15 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 let OG_STORAGE_API ="https://zerog-storage-kit.onrender.com";
 
 // Smart contract addresses and ABIs
-const FACTORY_ADDRESS = "0xA01CD368F39956ce09e538ed731D685b60Ea68eb";
+const FACTORY_ADDRESS = "0x560C7439E28359E2E8C0D72A52e8b5d6645766e7";
 const FACTORY_ABI = [
   "function createToken(string memory _name, string memory _symbol, string memory _description, bytes32 _metadataRootHash, bytes32 _imageRootHash) external returns (address token, address curve)",
   "event TokenCreated(address indexed token, address indexed curve, address indexed creator, uint256 timestamp, string name, string symbol, string description, bytes32 metadataRootHash, bytes32 imageRootHash)"
+];
+
+// Minimal ABI for the new bonding-curve Factory (used only for log parsing)
+const NEW_FACTORY_EVENT_ABI = [
+  'event PairCreated(address indexed token, address indexed curve, address indexed creator, string name, string symbol, uint256 seedOg, uint256 seedTokens)'
 ];
 
 // Temporary cache for file content hashing
@@ -47,6 +52,14 @@ function ensureDataDir() {
   const dataDir = path.join(process.cwd(), 'data');
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
+  }
+}
+
+const UPLOADS_CACHE_DIR = path.join(process.cwd(), 'data', 'uploads-cache');
+function ensureUploadsCacheDir() {
+  ensureDataDir();
+  if (!fs.existsSync(UPLOADS_CACHE_DIR)) {
+    fs.mkdirSync(UPLOADS_CACHE_DIR, { recursive: true });
   }
 }
 
@@ -84,14 +97,15 @@ import https from "https";
 import { Indexer, ZgFile } from "@0glabs/0g-ts-sdk";
 import os from "os";
 
+// (legacy kit proxy helper retained for compat, but no longer used in new flow)
 async function postToOGStorage(url, formData, headers, timeoutMs = 60000) {
-  return await axios.post(url, formData, {
-    headers,
-    timeout: timeoutMs,
-    maxRedirects: 5,
-    httpAgent: new http.Agent({ keepAlive: true }),
-    httpsAgent: new https.Agent({ keepAlive: true })
-  });
+      return await axios.post(url, formData, {
+        headers,
+        timeout: timeoutMs,
+        maxRedirects: 5,
+        httpAgent: new http.Agent({ keepAlive: true }),
+        httpsAgent: new https.Agent({ keepAlive: true })
+      });
 }
 
 
@@ -113,22 +127,104 @@ async function initializeDatabase() {
 let ogIndexer = null;
 let ogProvider = null;
 let ogSigner = null;
+let ogRpcUrl = null;
 async function initializeOGSdkOnce() {
   if (ogIndexer) return;
   const RPC_URL = process.env.RPC_URL || process.env.OG_RPC || 'https://evmrpc-testnet.0g.ai';
   const INDEXER_RPC = process.env.INDEXER_RPC || 'https://indexer-storage-testnet-turbo.0g.ai';
   const PRIVATE_KEY = process.env.PRIVATE_KEY;
-  if (!PRIVATE_KEY) {
-    console.warn('⚠️ Direct SDK upload not available: PRIVATE_KEY missing');
-    return;
-  }
   try {
-    ogIndexer = new Indexer(INDEXER_RPC);
-    ogProvider = new ethers.JsonRpcProvider(RPC_URL);
-    ogSigner = new ethers.Wallet(PRIVATE_KEY, ogProvider);
-    console.log('✅ 0G SDK context initialized (direct upload)');
+    ogIndexer = ogIndexer || new Indexer(INDEXER_RPC);
+    // Provider is helpful for tx waits but optional for downloads
+    ogProvider = ogProvider || new ethers.JsonRpcProvider(RPC_URL);
+    ogRpcUrl = RPC_URL;
+    if (PRIVATE_KEY) {
+      ogSigner = new ethers.Wallet(PRIVATE_KEY, ogProvider);
+      console.log('✅ 0G SDK context initialized (direct upload)');
+    } else {
+      console.log('ℹ️  0G SDK context initialized (read-only downloads)');
+    }
   } catch (e) {
     console.warn('⚠️ Failed to init 0G SDK context:', e?.message || e);
+  }
+}
+
+// -----------------------------
+// Direct SDK helpers
+// -----------------------------
+async function uploadBufferDirect(buffer, filename) {
+  await initializeOGSdkOnce();
+  if (!ogIndexer || !ogSigner) throw new Error('0G SDK not initialized');
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), '0g-upload-'));
+  const tempFile = path.join(tempDir, filename || `upload-${Date.now()}`);
+  fs.writeFileSync(tempFile, buffer);
+  try {
+    const zgFile = await ZgFile.fromFilePath(tempFile);
+    const [tree, treeErr] = await zgFile.merkleTree();
+    if (treeErr) throw new Error(String(treeErr));
+    // Submit upload with timeout fallback to avoid UI hanging
+    const submitPromise = ogIndexer.upload(zgFile, ogRpcUrl, ogSigner);
+    const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve([null, new Error('upload-timeout')]), 20000));
+    const result = await Promise.race([submitPromise, timeoutPromise]);
+    const [tx, uploadErr] = result;
+    if (uploadErr && String(uploadErr) !== 'Error: upload-timeout') throw new Error(String(uploadErr));
+    const rootHash = tree.rootHash();
+    await zgFile.close();
+    try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {}
+    // Save a local cache copy for immediate serving
+    try {
+      ensureUploadsCacheDir();
+      const cachePath = path.join(UPLOADS_CACHE_DIR, rootHash);
+      if (!fs.existsSync(cachePath)) {
+        fs.writeFileSync(cachePath, buffer);
+      }
+    } catch {}
+    return { rootHash, txHash: tx ? (tx.hash || tx) : null, pending: !tx };
+  } catch (e) {
+    try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {}
+    throw e;
+  }
+}
+
+async function downloadRootToStream(rootHash, res) {
+  await initializeOGSdkOnce();
+  if (!ogIndexer) throw new Error('0G SDK not initialized');
+  // Serve from local cache first if available
+  try {
+    ensureUploadsCacheDir();
+    const cachePath = path.join(UPLOADS_CACHE_DIR, rootHash);
+    if (fs.existsSync(cachePath)) {
+      const stat = fs.statSync(cachePath);
+      res.set({
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': stat.size,
+        'Cache-Control': 'public, max-age=31536000'
+      });
+      return fs.createReadStream(cachePath).pipe(res);
+    }
+  } catch {}
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), '0g-download-'));
+  const tempFile = path.join(tempDir, rootHash);
+  try {
+    // Try a few times in case the write just landed and not yet replicated
+    let err = await ogIndexer.download(rootHash, tempFile, true);
+    if (err) {
+      await new Promise(r => setTimeout(r, 1500));
+      err = await ogIndexer.download(rootHash, tempFile, true);
+    }
+    if (err) throw new Error(String(err));
+    const stat = fs.statSync(tempFile);
+    res.set({
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': stat.size,
+      'Cache-Control': 'public, max-age=31536000'
+    });
+    const stream = fs.createReadStream(tempFile);
+    stream.on('close', () => { try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {} });
+    stream.pipe(res);
+  } catch (e) {
+    try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {}
+    throw e;
   }
 }
 
@@ -189,13 +285,15 @@ app.get('/dialogue/:walletAddress', async (req, res) => {
     const rootHash = dialogueMap.get(walletAddress);
     if (!rootHash) return res.status(404).json({ message: 'No dialogue history found.' });
 
-    // Download JSON via OG storage proxy
-    console.log(`📥 Downloading dialogue for ${walletAddress} (root: ${rootHash})`);
-    const response = await axios.get(`${OG_STORAGE_API}/download/${rootHash}`, { timeout: 60000, responseType: 'json' });
-    if (!response.data || typeof response.data !== 'object') {
-      return res.status(404).json({ message: 'No dialogue history found.' });
-    }
-    return res.json(response.data);
+    // Download JSON via direct SDK (temp file then return JSON)
+    await initializeOGSdkOnce();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), '0g-dialogue-'));
+    const tempFile = path.join(tempDir, 'dialogue.json');
+    const err = await ogIndexer.download(rootHash, tempFile, true);
+    if (err) throw new Error(String(err));
+    const content = JSON.parse(fs.readFileSync(tempFile, 'utf8'));
+    try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {}
+    return res.json(content);
   } catch (e) {
     console.error('Error getting dialogue:', e?.message || e);
     return res.status(500).json({ message: 'Failed to retrieve dialogue history.' });
@@ -213,8 +311,12 @@ app.post('/dialogue/:walletAddress', async (req, res) => {
     try {
       const rootHash = (await loadDialogueMap(), dialogueMap.get(walletAddress));
       if (rootHash) {
-        const resp = await axios.get(`${OG_STORAGE_API}/download/${rootHash}`, { timeout: 60000, responseType: 'json' });
-        existing = resp.data;
+        await initializeOGSdkOnce();
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), '0g-dialogue-'));
+        const tempFile = path.join(tempDir, 'dialogue.json');
+        const err = await ogIndexer.download(rootHash, tempFile, true);
+        if (!err) existing = JSON.parse(fs.readFileSync(tempFile, 'utf8'));
+        try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {}
       }
     } catch {}
 
@@ -222,11 +324,9 @@ app.post('/dialogue/:walletAddress', async (req, res) => {
     const dialogueObj = typeof newDialogue === 'string' ? JSON.parse(newDialogue) : newDialogue;
     parsed.dialogue_history.push({ ...dialogueObj, timestamp: new Date().toISOString() });
 
-    // Upload merged JSON
-    const formData = new FormData();
-    formData.append('file', Buffer.from(JSON.stringify(parsed, null, 2)), { filename: 'dialogue.json', contentType: 'application/json' });
-    const uploadResp = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
-    const newRoot = uploadResp.data.rootHash;
+    // Upload merged JSON via direct SDK
+    const up = await uploadBufferDirect(Buffer.from(JSON.stringify(parsed, null, 2)), 'dialogue.json');
+    const newRoot = up.rootHash;
     dialogueMap.set(walletAddress, newRoot);
     await saveDialogueMap();
 
@@ -245,10 +345,8 @@ app.post('/dialogue/history/:walletAddress', async (req, res) => {
       return res.status(400).json({ message: "Missing 'dialogue_history' object in request body." });
     }
 
-    const formData = new FormData();
-    formData.append('file', Buffer.from(JSON.stringify(fullHistory, null, 2)), { filename: 'dialogue.json', contentType: 'application/json' });
-    const uploadResp = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
-    const newRoot = uploadResp.data.rootHash;
+    const up = await uploadBufferDirect(Buffer.from(JSON.stringify(fullHistory, null, 2)), 'dialogue.json');
+    const newRoot = up.rootHash;
     dialogueMap.set(walletAddress, newRoot);
     await saveDialogueMap();
 
@@ -339,20 +437,9 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         console.warn('Compression failed, using original:', e?.message || e);
       }
 
-      // Direct upload to 0G Storage
-      console.log(`🚀 Uploading directly to 0G Storage...`);
-      const formData = new FormData();
-      formData.append('file', outputBuffer, { filename: outName, contentType: outType });
-      
-      let response;
-      try {
-        response = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
-      } catch (uploadError) {
-        console.error("0G Storage upload failed:", uploadError.message);
-        throw new Error(`0G Storage upload failed: ${uploadError.message}`);
-      }
-
-      const rootHash = response.data.rootHash;
+      // Direct SDK upload
+      console.log(`🚀 Uploading via 0G SDK...`);
+      const { rootHash } = await uploadBufferDirect(outputBuffer, outName);
       console.log(`✅ Direct upload successful: ${rootHash}`);
       
       // Cache the file content hash for future reuse
@@ -412,14 +499,8 @@ app.post("/upload", upload.single("file"), async (req, res) => {
         return res.status(400).json({ error: "No data provided" });
       }
 
-      console.log(`📤 Direct JSON upload to 0G Storage`);
-
-      // Direct upload to 0G Storage
-      const formData = new FormData();
-      formData.append('file', Buffer.from(JSON.stringify(data)), { filename: 'metadata.json', contentType: 'application/json' });
-      
-      const response = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
-      const rootHash = response.data.rootHash;
+      console.log(`📤 Direct JSON upload via 0G SDK`);
+      const { rootHash } = await uploadBufferDirect(Buffer.from(JSON.stringify(data)), 'metadata.json');
       
       console.log(`✅ Direct JSON upload successful: ${rootHash}`);
 
@@ -482,32 +563,12 @@ app.post('/upload-image-direct', upload.single('file'), async (req, res) => {
 app.get("/download/:rootHash", async (req, res) => {
   try {
     const { rootHash } = req.params;
-    
     if (!rootHash || rootHash.length !== 66 || !rootHash.startsWith('0x')) {
       return res.status(400).json({ error: "Invalid root hash format" });
     }
-
     console.log(`📥 Downloading file: ${rootHash}`);
-
-    // Update file access tracking
     await dataService.updateFileAccess(rootHash);
-
-    // Download from 0G Storage
-    const response = await axios.get(`${OG_STORAGE_API}/download/${rootHash}`, {
-      timeout: 60000,
-      responseType: 'stream'
-    });
-
-    // Set appropriate headers
-      res.set({
-      'Content-Type': response.headers['content-type'] || 'application/octet-stream',
-      'Content-Length': response.headers['content-length'],
-      'Cache-Control': 'public, max-age=31536000' // 1 year cache
-    });
-
-    // Pipe the response
-    response.data.pipe(res);
-
+    await downloadRootToStream(rootHash, res);
   } catch (error) {
     console.error("Download error:", error);
     res.status(500).json({ error: "Download failed" });
@@ -545,12 +606,9 @@ app.post("/createCoin", upload.single("image"), async (req, res) => {
       // WebP compression removed for Render compatibility
       // Using original image without compression
       
-      // Upload to 0G Storage
-      const formData = new FormData();
-      formData.append('file', outputBuffer, { filename: outName, contentType: outType });
-      
-      const response = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
-      imageRootHash = response.data.rootHash;
+      // Upload via 0G SDK
+      const up = await uploadBufferDirect(outputBuffer, outName);
+      imageRootHash = up.rootHash;
       
       console.log(`✅ Coin image uploaded: ${imageRootHash}`);
     } else if (imageRootHashFromBody) {
@@ -568,7 +626,7 @@ app.post("/createCoin", upload.single("image"), async (req, res) => {
       description,
       creator: creator.toLowerCase(),
       imageHash: imageRootHash,
-      imageUrl: imageRootHash ? `${OG_STORAGE_API}/download/${imageRootHash}` : null,
+      imageUrl: imageRootHash ? `/download/${imageRootHash}` : null,
       metadataHash: null,
       metadataUrl: null,
       imageCompressionRatio: imageFile && imageFileSize > 0 ? (outputBuffer.length / imageFileSize) : null,
@@ -1093,18 +1151,15 @@ async function uploadFileToOGStorage(file) {
     const { outputBuffer, outName, outType, compressionRatio, compressionType } = await compressFile(file);
     
     // Upload to 0G Storage
-    console.log(`🚀 Uploading avatar to 0G Storage...`);
-    const formData = new FormData();
-    formData.append('file', outputBuffer, { filename: outName, contentType: outType });
-    
-    const response = await postToOGStorage(`${OG_STORAGE_API}/upload`, formData, formData.getHeaders());
-    const rootHash = response.data.rootHash;
+      console.log(`🚀 Uploading avatar via 0G SDK...`);
+      const up = await uploadBufferDirect(outputBuffer, outName);
+      const rootHash = up.rootHash;
     
     console.log(`✅ Avatar upload successful: ${rootHash}`);
     
     return {
       success: true,
-      url: `${OG_STORAGE_API}/download/${rootHash}`,
+      url: `/download/${rootHash}`,
       rootHash: rootHash,
       compression: {
         originalSize: file.size,
@@ -1293,6 +1348,91 @@ app.post("/cache/clear", async (req, res) => {
   }
 });
 
+app.post('/resolvePair', async (req, res) => {
+  try {
+    const { txHash, creator, factory } = req.body || {}
+    if (!txHash || !creator || !factory) {
+      return res.status(400).json({ success: false, error: 'txHash, creator, factory are required' })
+    }
+
+    const rpcUrl = process.env.RPC_URL || process.env.OG_TESTNET_RPC || 'https://evmrpc-testnet.0g.ai'
+    const provider = new ethers.JsonRpcProvider(rpcUrl)
+
+    // Fetch receipt for block number hint
+    const receipt = await provider.getTransactionReceipt(txHash)
+    if (!receipt) {
+      return res.status(404).json({ success: false, error: 'Transaction receipt not found' })
+    }
+
+    const iface = new ethers.Interface(NEW_FACTORY_EVENT_ABI)
+    const topic0 = iface.getEvent('PairCreated').topicHash
+
+    const fromBlock = Math.max(0, (receipt.blockNumber || 0) - 20)
+    const toBlock = (receipt.blockNumber || 0) + 10
+
+    const logs = await provider.getLogs({
+      fromBlock,
+      toBlock,
+      address: factory,
+      topics: [topic0]
+    })
+
+    let tokenAddr = null
+    let curveAddr = null
+
+    for (const log of logs) {
+      try {
+        const parsed = iface.parseLog(log)
+        if (parsed.name === 'PairCreated' && String(parsed.args[2]).toLowerCase() === String(creator).toLowerCase()) {
+          tokenAddr = parsed.args[0]
+          curveAddr = parsed.args[1]
+          break
+        }
+      } catch {}
+    }
+
+    // If not found, fallback to wider range
+    if (!tokenAddr || !curveAddr) {
+      const current = await provider.getBlockNumber()
+      const widerFrom = Math.max(0, current - 10000)
+      const wider = await provider.getLogs({ fromBlock: widerFrom, toBlock: current, address: factory, topics: [topic0] })
+      for (const log of wider.reverse()) {
+        try {
+          const parsed = iface.parseLog(log)
+          if (parsed.name === 'PairCreated' && String(parsed.args[2]).toLowerCase() === String(creator).toLowerCase()) {
+            tokenAddr = parsed.args[0]
+            curveAddr = parsed.args[1]
+            break
+          }
+        } catch {}
+      }
+    }
+
+    if (!tokenAddr || !curveAddr) {
+      return res.status(404).json({ success: false, error: 'PairCreated not found for creator in queried range' })
+    }
+
+    // Persist to DB if we have a coin row with this tx or creator+symbol
+    try {
+      await dataService.initialize()
+      const db = await databaseManager.getConnection()
+      // Update the most recent coin by this creator with empty curveAddress
+      await db.run(
+        `UPDATE coins SET tokenAddress = COALESCE(tokenAddress, ?), curveAddress = ?, updatedAt = ?
+         WHERE creator = ? AND (curveAddress IS NULL OR curveAddress = '')
+         ORDER BY createdAt DESC LIMIT 1`,
+        [tokenAddr, curveAddr, Date.now(), String(creator).toLowerCase()]
+      )
+    } catch (e) {
+      console.warn('DB update skipped:', e?.message || e)
+    }
+
+    return res.json({ success: true, tokenAddress: tokenAddr, curveAddress: curveAddr, txHash })
+  } catch (e) {
+    console.error('resolvePair error:', e)
+    return res.status(500).json({ success: false, error: e?.message || 'resolvePair failed' })
+  }
+})
 
 /**
  * START SERVER
@@ -1312,6 +1452,7 @@ app.listen(PORT, () => {
   console.log(`🪙 Create coin: POST /createCoin`);
   console.log(`🗣️ Dialogue endpoints: GET/POST /dialogue/:walletAddress, POST /dialogue/history/:walletAddress`);
   console.log(`🖼️ Direct SDK image upload: POST /upload-image-direct`);
+  console.log(`🔎 Resolve new pair: POST /resolvePair`);
       console.log(`👤 Profile endpoints: GET/PUT /profile/:walletAddress`);
       console.log(`📊 Market data: GET /market/stats`);
   console.log(`💚 Health check: GET /health`);

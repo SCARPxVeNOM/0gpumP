@@ -25,7 +25,9 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
   const publicClient = usePublicClient()
   
   // New bonding curve factory configuration
-  const FACTORY_ADDRESS = '0x8A1173808F4BF4A35EBb9e6BAFe91E96B2bCc93c'
+  const FACTORY_ADDRESS = '0x560C7439E28359E2E8C0D72A52e8b5d6645766e7'
+  const ROUTER_ADDRESS = '0x6738b8c52d4C695cc92D83cfE90B00e9C9F56659'
+  const WETH_ADDRESS = '0xf1c1d5E1c79B693AE7b674b8254A8A62314296fB'
   
   // New bonding curve system - fixed parameters for immediate trading
   
@@ -176,7 +178,32 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
         throw new Error(result.error || 'Failed to create token')
       }
 
-      setCreationResult(result)
+      // Resolve token/curve addresses if missing (receipt logs delayed)
+      let tokenAddr = result.tokenAddress
+      let curveAddr = result.curveAddress
+      if (!tokenAddr || !curveAddr) {
+        try {
+          const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
+          const respResolve = await fetch(`${backendBase}/resolvePair`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              txHash: result.txHash,
+              creator: address,
+              factory: FACTORY_ADDRESS
+            })
+          })
+          if (respResolve.ok) {
+            const rj = await respResolve.json()
+            tokenAddr = rj.tokenAddress || tokenAddr
+            curveAddr = rj.curveAddress || curveAddr
+          }
+        } catch (e) {
+          console.warn('resolvePair failed:', e)
+        }
+      }
+
+      setCreationResult({ ...result, tokenAddress: tokenAddr, curveAddress: curveAddr })
       setTxHash(result.txHash || 'Transaction submitted')
       setStatus('✅ Token created successfully! Transaction confirmed on 0G Chain.')
       setSuccess(true)
@@ -186,8 +213,8 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
         symbol,
         supply: supply.replace(/_/g, ''),
         imageHash: finalImageHash,
-        tokenAddress: result.tokenAddress || undefined,
-        curveAddress: result.curveAddress || undefined,
+        tokenAddress: tokenAddr || undefined,
+        curveAddress: curveAddr || undefined,
         txHash: result.txHash || 'Transaction submitted',
         description: meta.description,
         metadataRootHash,
@@ -210,10 +237,10 @@ export default function TokenCreatorModal({ isOpen, onClose, onTokenCreated }: T
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              tokenAddress: result.tokenAddress,
+              tokenAddress: tokenAddr,
               tokenName: name,
               tokenSymbol: symbol,
-              curveAddress: result.curveAddress,
+              curveAddress: curveAddr,
               txHash: result.txHash,
               imageUrl: finalImageHash ? `${backendBase}/download/${finalImageHash}` : undefined,
               description: meta.description

@@ -80,10 +80,10 @@ class BlockchainTradingService {
   private readProvider: ethers.providers.FallbackProvider | null = null
   
   // Contract addresses from 0G testnet deployment
-  // 0G testnet DEX (deployed via deployCoreDEX.js)
-  private FACTORY_ADDRESS = '0x10ad7199954FE3479B77c9b8aaAFa2EA44275fd6'
-  private ROUTER_ADDRESS = '0x631b62C792121cE905e73195b6B3a09bd3557a19'
-  private WETH_ADDRESS = '0x2b4EcA0CD50864faBA28d21E4fEB9A73B0db9BDB'
+  // 0G Galileo DEX (deployed via deployCoreDEX.js)
+  private FACTORY_ADDRESS = '0x6eb985234c12acb73619aabbE058868713c634f8'
+  private ROUTER_ADDRESS = '0x6738b8c52d4C695cc92D83cfE90B00e9C9F56659'
+  private WETH_ADDRESS = '0xf1c1d5E1c79B693AE7b674b8254A8A62314296fB'
   
   private factoryContract: ethers.Contract | null = null
   private routerContract: ethers.Contract | null = null

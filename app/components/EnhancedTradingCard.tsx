@@ -105,25 +105,27 @@ export default function EnhancedTradingCard({
   // Initialize services
   useEffect(() => {
     if (isConnected) {
-      try {
-        const eth = (typeof window !== 'undefined') ? (window as any).ethereum : undefined
-        if (!eth) return
-        const ethersProvider = new BrowserProvider(eth)
-        setProvider(ethersProvider)
-        newBondingCurveTradingService.initialize(ethersProvider)
+      (async () => {
+        try {
+          const eth = (typeof window !== 'undefined') ? (window as any).ethereum : undefined
+          if (!eth) return
+          const ethersProvider = new BrowserProvider(eth)
+          setProvider(ethersProvider)
+          await newBondingCurveTradingService.initialize(ethersProvider)
         
-        // Use curve address from props if available
-        if (curveAddress && curveAddress !== '' && curveAddress !== 'undefined') {
-          setCurveAddressState(curveAddress)
-          loadCurveInfo(curveAddress)
-        } else if (tokenAddress && tokenAddress !== '' && tokenAddress !== 'undefined') {
-          // Fallback: try to use token address (this won't work for trading)
-          console.warn('⚠️ No curve address provided - trading will not work')
-          setCurveAddressState(null)
+          // Use curve address from props if available
+          if (curveAddress && curveAddress !== '' && curveAddress !== 'undefined') {
+            setCurveAddressState(curveAddress)
+            loadCurveInfo(curveAddress)
+          } else if (tokenAddress && tokenAddress !== '' && tokenAddress !== 'undefined') {
+            // Fallback: try to use token address (this won't work for trading)
+            console.warn('⚠️ No curve address provided - trading will not work')
+            setCurveAddressState(null)
+          }
+        } catch (error) {
+          console.warn('Failed to initialize services:', error)
         }
-      } catch (error) {
-        console.warn('Failed to initialize services:', error)
-      }
+      })()
     }
   }, [isConnected, tokenAddress, curveAddress])
   

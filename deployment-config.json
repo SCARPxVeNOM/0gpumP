@@ -1,8 +1,8 @@
 {
-  "factoryAddress": "0x0D94Dec8cE5792A86E4b95aF2E516c0A70042Aa1",
-  "routerAddress": "0x1Aa3fCC63f08103b20d8F34BaD6aE59dc6B10e45",
-  "wethAddress": "0x0Bd71a034D5602014206B965677E83C6484561F2",
+  "factoryAddress": "0x6eb985234c12acb73619aabbE058868713c634f8",
+  "routerAddress": "0x6738b8c52d4C695cc92D83cfE90B00e9C9F56659",
+  "wethAddress": "0xf1c1d5E1c79B693AE7b674b8254A8A62314296fB",
   "network": "0g-galileo-testnet",
   "deployerAddress": "0x2dC274ABC0df37647CEd9212e751524708a68996",
-  "deploymentTime": "2025-10-02T20:07:34.870Z"
+  "deploymentTime": "2025-10-06T18:30:48.954Z"
 }

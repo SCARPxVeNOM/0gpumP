@@ -1,8 +1,8 @@
 {
   "network": "0g-galileo-testnet",
-  "address": "0xA01CD368F39956ce09e538ed731D685b60Ea68eb",
+  "address": "0x560C7439E28359E2E8C0D72A52e8b5d6645766e7",
   "treasury": "0x2dC274ABC0df37647CEd9212e751524708a68996",
   "defaultFeeBps": 500,
   "deployer": "0x2dC274ABC0df37647CEd9212e751524708a68996",
-  "deployedAt": "2025-10-02T20:11:06.935Z"
+  "deployedAt": "2025-10-06T18:16:14.293Z"
 }
