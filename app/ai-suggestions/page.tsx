@@ -10,9 +10,10 @@ export default function AiSuggestionsPage() {
   useEffect(() => {
     async function load() {
       try {
+        const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
         const [sugRes, topRes] = await Promise.all([
-          fetch('/ai-suggestions').then(r => r.json()).catch(() => ({ suggestions: [] })),
-          fetch('/trending-topics').then(r => r.json()).catch(() => ({ topics: [] }))
+          fetch(`${backendBase}/ai-suggestions`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ suggestions: [] })),
+          fetch(`${backendBase}/trending-topics`, { cache: 'no-store' }).then(r => r.json()).catch(() => ({ topics: [] }))
         ])
         setSuggestions(sugRes?.suggestions || [])
         setTopics(topRes?.topics || [])
