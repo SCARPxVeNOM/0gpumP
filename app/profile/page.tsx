@@ -183,6 +183,25 @@ export default function ProfilePage() {
         } else {
           console.warn(`Failed to fetch trading history for ${userAddress}:`, histRes.status, histRes.statusText)
         }
+
+        // Fetch tokens held count
+        const tokensHeldRes = await fetch(`${backendBase}/profile/${userAddress}/tokens-held`, { cache: 'no-store' })
+        if (tokensHeldRes.ok) {
+          const tokensData = await tokensHeldRes.json()
+          const tokensHeld = tokensData.tokensHeld || 0
+          
+          console.log(`Profile enrichment: Found ${tokensHeld} tokens held by wallet ${userAddress}`)
+          
+          const updatedStats = {
+            ...completeProfile.tradingStats,
+            tokensHeld
+          }
+          const updated = { ...completeProfile, tradingStats: updatedStats }
+          setProfile(updated)
+          await userProfileManager.updateProfile(userAddress, { tradingStats: updatedStats })
+        } else {
+          console.warn(`Failed to fetch tokens held count for ${userAddress}:`, tokensHeldRes.status, tokensHeldRes.statusText)
+        }
       } catch (enrichErr) {
         console.warn('Profile enrichment skipped:', (enrichErr as any)?.message || enrichErr)
       }

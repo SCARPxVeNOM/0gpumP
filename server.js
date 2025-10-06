@@ -1579,6 +1579,23 @@ app.post("/trading/record", async (req, res) => {
   }
 });
 
+app.get("/profile/:userAddress/tokens-held", async (req, res) => {
+  try {
+    const { userAddress } = req.params;
+    
+    if (!userAddress) {
+      return res.status(400).json({ error: "Missing userAddress parameter" });
+    }
+    
+    const tokensHeld = await dataService.getTokensHeldCount(userAddress);
+    
+    res.json({ success: true, tokensHeld });
+  } catch (error) {
+    console.error("Get tokens held count error:", error);
+    res.status(500).json({ error: "Failed to get tokens held count" });
+  }
+});
+
 app.get("/trading/coin/:coinId", async (req, res) => {
   try {
     const { coinId } = req.params;
