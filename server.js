@@ -733,7 +733,23 @@ app.get('/ai-suggestions', async (_req, res) => {
     }
     const coins = await dataService.getCoins(100, 0, 'createdAt', 'DESC');
     const tokens = coins.map(c => ({ name: c.name || c.symbol, symbol: c.symbol, volume: c.volume24h || 0, holders: c.holders || 0, liquidity: c.liquidity || 0, price: c.price || 0 }));
-    const suggestions = await getTokenSuggestionsUsing0G(tokens);
+    let suggestions = [];
+    if (tokens.length === 0) {
+      suggestions = [
+        { name: 'AI Agents', reason: 'High interest; on-chain agent narratives growing', risk_level: 'medium' },
+        { name: 'Memes x AI', reason: 'Memecoin meta + AI branding performs well', risk_level: 'high' },
+        { name: 'Onchain Gaming', reason: 'Active communities and virality potential', risk_level: 'medium' }
+      ];
+    } else {
+      suggestions = await getTokenSuggestionsUsing0G(tokens);
+    }
+    if (!Array.isArray(suggestions) || suggestions.length === 0) {
+      suggestions = [
+        { name: tokens[0]?.name || 'OG Builder', reason: 'Early liquidity and first-mover advantage', risk_level: 'medium' },
+        { name: tokens[1]?.name || 'Agent Pepe', reason: 'Combine meme + agent narrative', risk_level: 'high' },
+        { name: tokens[2]?.name || 'Chain Gamer', reason: 'Tap gaming communities', risk_level: 'medium' }
+      ]
+    }
     aiCache.suggestions = suggestions;
     aiCache.suggestionsExpiry = now + AI_TTL_MS;
     res.json({ suggestions });
@@ -749,7 +765,10 @@ app.get('/trending-topics', async (_req, res) => {
     if (aiCache.topics && aiCache.topicsExpiry > now) {
       return res.json({ topics: aiCache.topics, cached: true });
     }
-    const topics = await getTrendingTopicsUsing0G();
+    let topics = await getTrendingTopicsUsing0G();
+    if (!Array.isArray(topics) || topics.length === 0) {
+      topics = ['AI Agents', 'DeFi 2.0', 'Onchain Gaming', 'RWA', 'Memes x AI', 'Bitcoin L2', 'SocialFi', 'Cross-chain', '0G Storage', 'Decentralized Compute'];
+    }
     aiCache.topics = topics;
     aiCache.topicsExpiry = now + AI_TTL_MS;
     res.json({ topics });
