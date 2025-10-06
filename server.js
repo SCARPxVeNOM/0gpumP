@@ -593,11 +593,24 @@ async function getTokenSuggestionsUsing0G(tokens) {
   const wallet = new ethers.Wallet(priv, provider);
   const broker = await createZGComputeNetworkBroker(wallet);
 
-  // Try to ensure account exists; if API not available, continue and rely on fallback
+  // Ensure compute account exists: create and fund minimal ledger if missing
   try {
-    await broker.ledger.getLedger();
+    const account = await broker.ledger.getLedger();
+    console.log('[AI] 0G Compute balance:', ethers.formatEther(account.totalBalance), 'OG');
   } catch (e) {
-    console.warn('[AI] ledger check failed, will use fallback if inference errors:', e?.message || e);
+    const msg = String(e?.message || '');
+    if (msg.includes('Account does not exist')) {
+      try {
+        // Create sub-ledger with minimal funds (0.05 OG). Requires wallet balance.
+        await broker.ledger.addLedger(0.05);
+        const account = await broker.ledger.getLedger();
+        console.log('[AI] Created ledger. Balance:', ethers.formatEther(account.totalBalance), 'OG');
+      } catch (inner) {
+        console.warn('[AI] Failed to create/fund ledger. Will fallback if inference fails:', inner?.message || inner);
+      }
+    } else {
+      console.warn('[AI] ledger check failed, will fallback if inference fails:', msg);
+    }
   }
 
   // Example provider (deepseek-r1-70b)
@@ -634,9 +647,21 @@ async function getTrendingTopicsUsing0G() {
   const wallet = new ethers.Wallet(priv, provider);
   const broker = await createZGComputeNetworkBroker(wallet);
   try {
-    await broker.ledger.getLedger();
+    const account = await broker.ledger.getLedger();
+    console.log('[AI] 0G Compute balance:', ethers.formatEther(account.totalBalance), 'OG');
   } catch (e) {
-    console.warn('[AI] ledger check failed for topics, may fallback:', e?.message || e)
+    const msg = String(e?.message || '');
+    if (msg.includes('Account does not exist')) {
+      try {
+        await broker.ledger.addLedger(0.05);
+        const account = await broker.ledger.getLedger();
+        console.log('[AI] Created ledger. Balance:', ethers.formatEther(account.totalBalance), 'OG');
+      } catch (inner) {
+        console.warn('[AI] Failed to create/fund ledger for topics. Will fallback:', inner?.message || inner)
+      }
+    } else {
+      console.warn('[AI] ledger check failed for topics, may fallback:', msg)
+    }
   }
   const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
   await broker.inference.acknowledgeProviderSigner(providerAddress);
