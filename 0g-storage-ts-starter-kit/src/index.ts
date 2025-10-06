@@ -128,12 +128,13 @@ app.post('/upload', upload.single('file'), async (req, res) => {
       throw new Error(`Upload error: ${uploadErr}`);
     }
 
-    console.log(`✅ Transaction submitted: ${tx}`);
+    console.log(`✅ Transaction submitted: ${tx.txHash}`);
+    console.log(`📁 Root Hash: ${tx.rootHash}`);
     console.log(`⏳ Waiting for confirmation...`);
 
     // Wait for transaction confirmation
     try {
-      const receipt = await provider.waitForTransaction(tx as string, 1, 60000); // 60 second timeout
+      const receipt = await provider.waitForTransaction(tx.txHash, 1, 60000); // 60 second timeout
       if (receipt && receipt.status === 1) {
         console.log(`✅ Transaction confirmed in block ${receipt.blockNumber}`);
       } else {
@@ -146,8 +147,8 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     await zgFile.close();
 
     res.json({
-      rootHash: tree?.rootHash() ?? '',
-      transactionHash: tx as string
+      rootHash: tx.rootHash,
+      transactionHash: tx.txHash
     });
   } catch (error) {
     console.error('Upload error:', error);
