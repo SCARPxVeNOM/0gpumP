@@ -17,6 +17,8 @@ const upload = multer({ dest: 'uploads/' });
 const RPC_URL = process.env.RPC_URL || 'https://evmrpc-testnet.0g.ai/';
 const INDEXER_RPC = process.env.INDEXER_RPC || 'https://indexer-storage-testnet-turbo.0g.ai';
 const PRIVATE_KEY = '0x8c6f10acb86aeab293bd60bcf7d0e69f70643f8d219b81b6665885844abc3a9c';
+const GAS_PRICE = process.env.GAS_PRICE || '3000000000'; // 3 Gwei
+const MAX_GAS_LIMIT = process.env.MAX_GAS_LIMIT || '5000000'; // 5M gas (much lower)
 
 if (!PRIVATE_KEY) {
   console.error('❌ Private key not found in environment variables');
@@ -116,12 +118,34 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     }
 
     console.log(`📤 Uploading file to 0G Storage...`);
+    console.log(`⛽ Gas Price: ${GAS_PRICE} wei (${parseInt(GAS_PRICE) / 1e9} Gwei)`);
+    console.log(`⛽ Max Gas Limit: ${MAX_GAS_LIMIT} gas`);
     
-    // Upload file with 0.3.1 API syntax
-    const [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer as any);
+    // Upload file with 0.3.1 API syntax and custom gas settings
+    const uploadOptions = {
+      gasPrice: GAS_PRICE,
+      gasLimit: MAX_GAS_LIMIT
+    };
+    
+    const [tx, uploadErr] = await indexer.upload(zgFile, RPC_URL, signer as any, uploadOptions);
 
     if (uploadErr !== null) {
       throw new Error(`Upload error: ${uploadErr}`);
+    }
+
+    console.log(`✅ Transaction submitted: ${tx}`);
+    console.log(`⏳ Waiting for confirmation...`);
+
+    // Wait for transaction confirmation
+    try {
+      const receipt = await provider.waitForTransaction(tx, 1, 60000); // 60 second timeout
+      if (receipt && receipt.status === 1) {
+        console.log(`✅ Transaction confirmed in block ${receipt.blockNumber}`);
+      } else {
+        console.log(`⚠️ Transaction failed or timed out`);
+      }
+    } catch (waitError) {
+      console.log(`⚠️ Could not wait for confirmation: ${waitError}`);
     }
 
     await zgFile.close();
