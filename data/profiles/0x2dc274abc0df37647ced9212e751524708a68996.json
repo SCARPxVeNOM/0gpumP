@@ -1,14 +1,87 @@
 {
-  "profileHash": "0xb8886889fba0419a400cdb1ca309b4203e99f044ded68a917686ae7762aa1637",
-  "avatarUrl": "/download/0xb0bf993605d81052137b5eaebf60206ae2aa38af17dd0a905b8c13396517ecba",
-  "updatedAt": "2025-10-06T21:15:52.051Z",
-  "username": "aryan",
-  "bio": "Welcome to OG Pump! 🚀",
-  "preferences": {
-    "theme": "light",
-    "notifications": true,
-    "publicProfile": true,
-    "showTradingStats": true
-  },
-  "walletAddress": "0x2dc274abc0df37647ced9212e751524708a68996"
+  "profileHash": "0xfc47560c77e6eab3491646bb56d48a65090c45c74cefaa8e27cbd7365515c3bf",
+  "tokensCreated": [
+    {
+      "tokenAddress": "",
+      "tokenName": "NEWGEN",
+      "tokenSymbol": "NGN",
+      "createdAt": "2025-10-06T18:49:59.291Z",
+      "txHash": "local-1759776599285",
+      "imageUrl": "/download/0x9baff24e8d889137f697e4973f4f7fd14740292460574b47c80cbd0e48eaab4a",
+      "description": "NEWGEN (NGN) - A memecoin created on 0G Chain"
+    },
+    {
+      "tokenAddress": "",
+      "tokenName": "BLANKTOKEN",
+      "tokenSymbol": "BLKTKN",
+      "createdAt": "2025-10-06T17:52:39.839Z",
+      "txHash": "local-1759773159838",
+      "imageUrl": "/download/0x97eed5aa60a734b113b744714faa054b1d17b9f69a1a0aa5b1b2a4a4dcc4f3a0",
+      "description": "BLANKTOKEN (BLKTKN) - A memecoin created on 0G Chain"
+    },
+    {
+      "tokenAddress": "",
+      "tokenName": "TESTTOKEN11",
+      "tokenSymbol": "TEST11",
+      "createdAt": "2025-10-06T17:50:37.615Z",
+      "txHash": "local-1759773037614",
+      "imageUrl": "/download/0x4d3fed761b3c0ff5af9137ea45e5682ac69629a2e55ff5544a616bfaff76f5e1",
+      "description": "TESTTOKEN11 (TEST11) - A memecoin created on 0G Chain"
+    },
+    {
+      "tokenAddress": "",
+      "tokenName": "ERRORCOIN",
+      "tokenSymbol": "ERC",
+      "createdAt": "2025-10-06T17:45:14.077Z",
+      "txHash": "local-1759772714071",
+      "imageUrl": "/download/0x05b10e20e812a4bc34a21df23789a41be21e135cf4f89fa55265383a629d1f11",
+      "description": "ERRORCOIN (ERC) - A memecoin created on 0G Chain"
+    },
+    {
+      "tokenAddress": "",
+      "tokenName": "ROAD",
+      "tokenSymbol": "RAD",
+      "createdAt": "2025-10-06T17:33:21.786Z",
+      "txHash": "local-1759772001785",
+      "imageUrl": "/download/0x9baff24e8d889137f697e4973f4f7fd14740292460574b47c80cbd0e48eaab4a",
+      "description": "ROAD (RAD) - A memecoin created on 0G Chain"
+    },
+    {
+      "tokenAddress": "",
+      "tokenName": "DEMOTEST",
+      "tokenSymbol": "DMT",
+      "createdAt": "2025-10-06T17:27:24.910Z",
+      "txHash": "local-1759771644908",
+      "imageUrl": "/download/0xa5de27f88bb0924aced5141ea7a9573ad187f16d08c2c6848679105f2414c824",
+      "description": "DEMOTEST (DMT) - A memecoin created on 0G Chain"
+    },
+    {
+      "tokenAddress": "",
+      "tokenName": "ANIMAL",
+      "tokenSymbol": "ANML",
+      "createdAt": "2025-10-06T17:05:30.671Z",
+      "txHash": "local-1759770330668",
+      "imageUrl": "/download/0x3511b6a68c6af7df6b8a3fb7c65f3a25601564282fd077106ef4f72463d1c99e",
+      "description": "ANIMAL (ANML) - A memecoin created on 0G Chain"
+    },
+    {
+      "tokenAddress": "",
+      "tokenName": "DOGEWOW",
+      "tokenSymbol": "WOW",
+      "createdAt": "2025-10-06T17:04:57.790Z",
+      "txHash": "local-1759770297788",
+      "imageUrl": "/download/0x3511b6a68c6af7df6b8a3fb7c65f3a25601564282fd077106ef4f72463d1c99e",
+      "description": "DOGEWOW (WOW) - A memecoin created on 0G Chain"
+    }
+  ],
+  "walletAddress": "0x2dc274abc0df37647ced9212e751524708a68996",
+  "updatedAt": "2025-10-06T21:26:50.671Z",
+  "preferences": {},
+  "tradingStats": {
+    "totalTrades": 0,
+    "totalVolume": 0,
+    "tokensHeld": 0,
+    "favoriteTokens": [],
+    "lastTradeAt": null
+  }
 }

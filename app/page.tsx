@@ -103,6 +103,8 @@ export default function App() {
                 supply: c.supply,
                 description: c.description,
                 imageUrl: c.imageUrl || (c.imageHash ? `${backendBase}/download/${c.imageHash}` : ''),
+                imageHash: c.imageHash, // Preserve imageHash for CoinImage component
+                imageRootHash: c.imageHash, // Also set imageRootHash for compatibility
                 createdAt: new Date(c.createdAt).toISOString(),
                 creator: c.creator,
                 txHash: c.txHash,
@@ -201,6 +203,8 @@ export default function App() {
         supply: tokenData.supply,
         description: tokenData.description,
         imageUrl: tokenData.imageHash ? ogStorageSDK.getCoinImageUrl(tokenData.imageHash) : '',
+        imageHash: tokenData.imageHash, // Preserve imageHash for CoinImage component
+        imageRootHash: tokenData.imageHash, // Also set imageRootHash for compatibility
         createdAt: new Date().toISOString(),
         creator: address || 'Unknown',
         // pass-through chain fields for explorer buttons

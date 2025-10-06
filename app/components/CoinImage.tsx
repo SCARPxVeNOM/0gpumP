@@ -24,8 +24,16 @@ export default function CoinImage({ coin, size = 'md', className = '' }: CoinIma
   }, [])
 
   useEffect(() => {
+    console.log('CoinImage: Processing coin data:', {
+      imageUrl: coin.imageUrl,
+      imageHash: (coin as any).imageHash,
+      imageRootHash: (coin as any).imageRootHash,
+      coinName: coin.name
+    });
+
     // Preferred: explicit URL
     if (coin.imageUrl && (coin.imageUrl.startsWith('http') || coin.imageUrl.startsWith('/'))) {
+      console.log('CoinImage: Using imageUrl:', coin.imageUrl);
       // Route through Next proxy if it's a root-hash URL pointing to backend
       if (coin.imageUrl.startsWith('http')) {
         // If imageUrl already absolute, keep it; otherwise rely on proxy path below
@@ -39,11 +47,13 @@ export default function CoinImage({ coin, size = 'md', className = '' }: CoinIma
     // Fallback: root hash present
     const root = (coin as any).imageRootHash || (coin as any).imageHash
     if (typeof root === 'string' && root.length > 0) {
+      console.log('CoinImage: Using root hash:', root);
       // Use proxy path to avoid mixed content/CORS
       setImageSrc(`/api/image/${root}`)
       return
     }
 
+    console.log('CoinImage: No image data found, showing fallback');
     setImageSrc(null)
   }, [coin.imageUrl, (coin as any).imageHash, (coin as any).imageRootHash, backendBase])
 
