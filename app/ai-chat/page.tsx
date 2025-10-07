@@ -47,7 +47,7 @@ export default function AiChatPage() {
     setIsLoading(true)
 
     try {
-      const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
+      const backendBase = (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_API_URL) || (typeof process !== 'undefined' && (process as any).env && (process as any).env.NEXT_PUBLIC_BACKEND_URL) || 'http://localhost:4000'
       
       const response = await fetch(`${backendBase}/ai-chat`, {
         method: 'POST',
