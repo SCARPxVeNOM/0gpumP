@@ -79,7 +79,7 @@ export default function AiChatPage() {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again later.',
+        content: 'I apologize, but I\'m having trouble connecting to the AI service right now. This might be due to network issues or the 0G Compute service being temporarily unavailable. Please try again in a moment, or feel free to ask me about tokens, 0G network, or trading strategies!',
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
