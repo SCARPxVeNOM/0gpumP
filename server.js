@@ -780,11 +780,16 @@ app.get('/trending-topics', async (_req, res) => {
 
 async function getAIChatResponse(message, conversation) {
   console.log('🤖 Starting AI chat response generation...');
+  console.log(`📝 Message: ${message.substring(0, 100)}...`);
+  console.log(`💬 Conversation length: ${(conversation || []).length}`);
   
   try {
     const { createZGComputeNetworkBroker } = await import('@0glabs/0g-serving-broker');
     const ogRpc = process.env.OG_RPC || process.env.RPC_URL || 'https://evmrpc-testnet.0g.ai';
     const priv = process.env.PRIVATE_KEY;
+    
+    console.log(`🔑 Private key found: ${priv ? 'Yes' : 'No'}`);
+    console.log(`🌐 OG RPC: ${ogRpc}`);
     
     if (!priv) {
       console.warn('⚠️ PRIVATE_KEY not found, using fallback response');
@@ -794,6 +799,7 @@ async function getAIChatResponse(message, conversation) {
     console.log('🔗 Initializing 0G Compute broker...');
     const provider = new ethers.JsonRpcProvider(ogRpc);
     const wallet = new ethers.Wallet(priv, provider);
+    console.log(`👛 Wallet address: ${wallet.address}`);
     const broker = await createZGComputeNetworkBroker(wallet);
 
     // Ensure compute account exists: create and fund minimal ledger if missing
@@ -868,7 +874,7 @@ Be helpful, knowledgeable, and engaging. Keep responses concise but informative.
         console.log('✅ 0G Compute chat response generated');
         return answer;
       }
-    } catch (error) {
+  } catch (error) {
       console.warn('⚠️ 0G Compute chat failed:', error?.message || error);
     }
   } catch (error) {
@@ -1773,6 +1779,62 @@ app.get("/ai-chat/test", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "AI chat test failed",
+      details: error.message
+    });
+  }
+});
+
+// Manual 0G Compute setup endpoint
+app.post("/ai-chat/setup", async (req, res) => {
+  try {
+    console.log('🔧 Manual 0G Compute setup...');
+    
+    const { createZGComputeNetworkBroker } = await import('@0glabs/0g-serving-broker');
+    const ogRpc = process.env.OG_RPC || process.env.RPC_URL || 'https://evmrpc-testnet.0g.ai';
+    const priv = process.env.PRIVATE_KEY;
+    
+    if (!priv) {
+      return res.status(400).json({ error: "PRIVATE_KEY not found in environment" });
+    }
+    
+    const provider = new ethers.JsonRpcProvider(ogRpc);
+    const wallet = new ethers.Wallet(priv, provider);
+    const broker = await createZGComputeNetworkBroker(wallet);
+    
+    console.log(`👛 Wallet address: ${wallet.address}`);
+    
+    // Check/create ledger
+    let account;
+    try {
+      account = await broker.ledger.getLedger();
+      console.log(`💰 Current balance: ${account.totalBalance} OG`);
+    } catch (e) {
+      console.log('📝 Creating new ledger...');
+      await broker.ledger.addLedger(0.05);
+      account = await broker.ledger.getLedger();
+    }
+    
+    // Acknowledge provider
+    const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
+    try {
+      await broker.inference.acknowledgeProviderSigner(providerAddress);
+      console.log('✅ Provider acknowledged');
+    } catch (e) {
+      console.log('⚠️ Provider acknowledgment failed (may be already known):', e.message);
+    }
+    
+    res.json({
+      success: true,
+      message: "0G Compute setup completed",
+      walletAddress: wallet.address,
+      balance: account.totalBalance.toString(),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("0G Compute setup error:", error);
+    res.status(500).json({
+      success: false,
+      error: "0G Compute setup failed",
       details: error.message
     });
   }
