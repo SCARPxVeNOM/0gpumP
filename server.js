@@ -778,6 +778,107 @@ app.get('/trending-topics', async (_req, res) => {
   }
 });
 
+async function getAIChatResponse(message, conversation) {
+  const { createZGComputeNetworkBroker } = await import('@0glabs/0g-serving-broker');
+  const ogRpc = process.env.OG_RPC || process.env.RPC_URL || 'https://evmrpc-testnet.0g.ai';
+  const priv = process.env.PRIVATE_KEY;
+  if (!priv) throw new Error('PRIVATE_KEY is required for 0G Compute');
+  const provider = new ethers.JsonRpcProvider(ogRpc);
+  const wallet = new ethers.Wallet(priv, provider);
+  const broker = await createZGComputeNetworkBroker(wallet);
+
+  // Ensure compute account exists: create and fund minimal ledger if missing
+  try {
+    const account = await broker.ledger.getLedger();
+    if (account.totalBalance < 0.01) {
+      console.log('💰 Funding 0G Compute account with 0.05 OG...');
+      await broker.ledger.addLedger(0.05);
+    }
+  } catch (e) {
+    console.log('📝 Creating 0G Compute account with 0.05 OG...');
+    await broker.ledger.addLedger(0.05);
+  }
+
+  // Use deepseek-r1-70b provider
+  const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
+  
+  // Check if we've already acknowledged this provider (cache to avoid repeated transactions)
+  const cacheKey = `ack_${providerAddress}`;
+  if (!acknowledgedProviders.has(cacheKey)) {
+    try {
+      await broker.inference.acknowledgeProviderSigner(providerAddress);
+      acknowledgedProviders.set(cacheKey, true);
+      console.log('✅ Acknowledged 0G Compute provider');
+    } catch (e) {
+      console.warn('⚠️ Provider acknowledgment failed (may be already known):', e?.message || e);
+      acknowledgedProviders.set(cacheKey, true); // Cache anyway to avoid retries
+    }
+  }
+
+  try {
+    const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
+    
+    // Build conversation context
+    const systemPrompt = `You are PumpAI, an AI assistant for the 0G Pump platform. You help users with:
+
+- Token analysis and market insights
+- 0G network and blockchain questions  
+- Meme coin trends and viral strategies
+- DeFi and trading advice
+- Technical explanations about 0G Compute and 0G Storage
+
+Be helpful, knowledgeable, and engaging. Keep responses concise but informative. If asked about specific tokens, provide analysis based on available data.`;
+
+    const messages = [
+      { role: "system", content: systemPrompt },
+      ...conversation.slice(-6).map(msg => ({ role: msg.role, content: msg.content })),
+      { role: "user", content: message }
+    ];
+    
+    const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
+    
+    const response = await fetch(`${endpoint}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...headers
+      },
+      body: JSON.stringify({ messages, model })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    const answer = data.choices?.[0]?.message?.content;
+    
+    if (answer) {
+      console.log('✅ 0G Compute chat response generated');
+      return answer;
+    }
+  } catch (error) {
+    console.warn('⚠️ 0G Compute chat failed:', error?.message || error);
+  }
+
+  // Fallback responses based on message content
+  const lowerMessage = message.toLowerCase();
+  
+  if (lowerMessage.includes('trend') || lowerMessage.includes('meme')) {
+    return "Based on current market trends, AI agents, DeFi 2.0, and gaming tokens are gaining traction. Consider creating tokens around viral internet culture, AI narratives, or innovative DeFi concepts. Always research thoroughly before launching!";
+  }
+  
+  if (lowerMessage.includes('0g') || lowerMessage.includes('storage') || lowerMessage.includes('compute')) {
+    return "0G is a decentralized data availability and compute network. 0G Storage provides decentralized file storage, while 0G Compute offers AI inference on decentralized GPUs. This platform uses both for token metadata and AI-powered insights!";
+  }
+  
+  if (lowerMessage.includes('token') || lowerMessage.includes('coin')) {
+    return "For successful token creation, focus on strong narratives, community building, and utility. Consider trending themes like AI, gaming, or DeFi. Always ensure proper tokenomics and liquidity. Would you like specific advice on any aspect?";
+  }
+  
+  return "I'm here to help with token analysis, 0G network questions, and market insights! Feel free to ask about trending topics, token strategies, or how 0G technology works.";
+}
+
 // ---------------------------------
 // AI setup utility: create/fund ledger and acknowledge provider
 // ---------------------------------
@@ -1593,6 +1694,30 @@ app.get("/profile/:userAddress/tokens-held", async (req, res) => {
   } catch (error) {
     console.error("Get tokens held count error:", error);
     res.status(500).json({ error: "Failed to get tokens held count" });
+  }
+});
+
+// AI Chat endpoint
+app.post("/ai-chat", async (req, res) => {
+  try {
+    const { message, conversation } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: "Missing message parameter" });
+    }
+
+    console.log(`🤖 AI Chat request: ${message.substring(0, 100)}...`);
+    
+    const response = await getAIChatResponse(message, conversation || []);
+    
+    res.json({ 
+      success: true, 
+      response: response,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error("AI Chat error:", error);
+    res.status(500).json({ error: "Failed to get AI response" });
   }
 });
 

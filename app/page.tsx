@@ -288,10 +288,10 @@ export default function App() {
             <Zap className="w-5 h-5" />
             <span>Advanced</span>
           </Link>
-          <a href="#" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
+          <Link href="/ai-chat" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <MessageCircle className="w-5 h-5" />
-            <span>Chat</span>
-          </a>
+            <span>Ask PumpAI</span>
+          </Link>
           <Link href="/profile" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <User className="w-5 h-5" />
             <span>Profile</span>
