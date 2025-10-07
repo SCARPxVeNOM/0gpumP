@@ -852,27 +852,55 @@ Be helpful, knowledgeable, and engaging. Keep responses concise but informative.
       ];
       
       console.log('📤 Sending request to 0G Compute...');
-      const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
       
-      const response = await fetch(`${endpoint}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...headers
-        },
-        body: JSON.stringify({ messages, model })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      const answer = data.choices?.[0]?.message?.content;
-      
-      if (answer) {
-        console.log('✅ 0G Compute chat response generated');
-        return answer;
+      // Try a simpler approach - use the broker's built-in method if available
+      try {
+        const response = await broker.inference.chatCompletion({
+          providerAddress,
+          messages,
+          model,
+          temperature: 0.7,
+          maxTokens: 1000
+        });
+        
+        console.log('✅ 0G Compute response received via broker method');
+        return response.choices?.[0]?.message?.content || response.content || response;
+      } catch (brokerError) {
+        console.log('⚠️ Broker method failed, trying manual request:', brokerError.message);
+        
+        // Fallback to manual request
+        const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
+        
+        console.log('📋 Request headers:', Object.keys(headers));
+        console.log('📦 Request body keys:', Object.keys({ messages, model }));
+        
+        const response = await fetch(`${endpoint}/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...headers
+          },
+          body: JSON.stringify({ 
+            messages: messages,
+            model: model,
+            temperature: 0.7,
+            max_tokens: 1000
+          })
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ 0G Compute error response:', errorText);
+          throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+        }
+        
+        const data = await response.json();
+        const answer = data.choices?.[0]?.message?.content;
+        
+        if (answer) {
+          console.log('✅ 0G Compute chat response generated');
+          return answer;
+        }
       }
   } catch (error) {
       console.warn('⚠️ 0G Compute chat failed:', error?.message || error);
