@@ -46,7 +46,7 @@ const tempCache = new Map();
 // 0G Compute AI suggestions cache
 // -----------------------------
 let aiCache = { suggestions: null, suggestionsExpiry: 0, topics: null, topicsExpiry: 0 };
-const acknowledgedProviders = new Set();
+const acknowledgedProviders = new Map();
 const AI_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // -----------------------------
@@ -619,12 +619,12 @@ async function getTokenSuggestionsUsing0G(tokens) {
   if (!acknowledgedProviders.has(providerAddress)) {
     try {
       await broker.inference.acknowledgeProviderSigner(providerAddress);
-      acknowledgedProviders.add(providerAddress);
+      acknowledgedProviders.set(providerAddress, true);
     } catch (e) {
       const msg = String(e?.message || '');
       // Ignore common replay/known or already acknowledged cases
       if (msg.includes('already known') || msg.includes('nonce') || msg.includes('known')) {
-        acknowledgedProviders.add(providerAddress);
+        acknowledgedProviders.set(providerAddress, true);
         console.warn('[AI] acknowledge skipped:', msg);
       } else {
         console.warn('[AI] acknowledge provider error (continuing):', msg);
@@ -693,11 +693,11 @@ async function getTrendingTopicsUsing0G() {
   if (!acknowledgedProviders.has(providerAddress)) {
     try {
       await broker.inference.acknowledgeProviderSigner(providerAddress);
-      acknowledgedProviders.add(providerAddress);
+      acknowledgedProviders.set(providerAddress, true);
     } catch (e) {
       const msg = String(e?.message || '');
       if (msg.includes('already known') || msg.includes('nonce') || msg.includes('known')) {
-        acknowledgedProviders.add(providerAddress);
+        acknowledgedProviders.set(providerAddress, true);
         console.warn('[AI] acknowledge skipped:', msg);
       } else {
         console.warn('[AI] acknowledge provider error (continuing):', msg);
