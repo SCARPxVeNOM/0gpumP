@@ -814,8 +814,9 @@ async function getAIChatResponse(message, conversation) {
       await broker.ledger.addLedger(0.05);
     }
 
-    // Use deepseek-r1-70b provider
-    const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
+  // Try different providers - start with deepseek-r1-70b
+  const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
+  console.log(`🎯 Using provider: ${providerAddress}`);
     
     // Check if we've already acknowledged this provider (cache to avoid repeated transactions)
     const cacheKey = `ack_${providerAddress}`;
@@ -874,18 +875,24 @@ Be helpful, knowledgeable, and engaging. Keep responses concise but informative.
         console.log('📋 Request headers:', Object.keys(headers));
         console.log('📦 Request body keys:', Object.keys({ messages, model }));
         
+        // Try a simpler request format
+        const requestBody = {
+          messages: messages,
+          model: model,
+          temperature: 0.7,
+          max_tokens: 1000,
+          stream: false
+        };
+        
+        console.log('📦 Request body:', JSON.stringify(requestBody, null, 2));
+        
         const response = await fetch(`${endpoint}/chat/completions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...headers
           },
-          body: JSON.stringify({ 
-            messages: messages,
-            model: model,
-            temperature: 0.7,
-            max_tokens: 1000
-          })
+          body: JSON.stringify(requestBody)
         });
         
         if (!response.ok) {
