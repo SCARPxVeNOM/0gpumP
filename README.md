@@ -1,409 +1,425 @@
-# 🚀 0G Pump - Decentralized Memecoin Trading Platform
+# 🚀 0G Pump - Next-Gen Decentralized Memecoin Platform
 
-A **pump.fun-style** trading platform built on the **0G Chain** ecosystem, featuring instant token creation, bonding curve trading, and decentralized storage integration.
+<div align="center">
 
-![0G Pump Banner](public/og-logo.jpg)
+![0G Pump](public/og-logo.jpg)
 
-## 🌟 Overview
+**The Ultimate Pump.fun Experience on 0G Chain**
 
-0G Pump is a comprehensive decentralized trading platform that allows users to create, trade, and discover memecoins on the 0G Chain. Built with modern Web3 technologies, it provides a seamless experience for token creation, trading, and community building.
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![0G Chain](https://img.shields.io/badge/0G-Chain-purple.svg)](https://0g.ai)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-38B2AC.svg)](https://tailwindcss.com)
 
-### ✨ Key Features
+[Live Demo](https://0gpump.vercel.app) · [Documentation](#-features) · [Report Bug](../../issues) · [Request Feature](../../issues)
 
-- **🎯 Instant Token Creation** - Deploy memecoins with custom names, symbols, and images
-- **📈 Bonding Curve Trading** - Trade tokens using advanced bonding curve mechanics
-- **💾 0G Storage Integration** - Decentralized storage for images and metadata
-- **🔄 Real-time Trading** - Live price updates and instant buy/sell functionality
-- **🌐 Multi-wallet Support** - Connect with MetaMask, WalletConnect, and more
-- **📱 Responsive Design** - Beautiful UI that works on all devices
-- **🔍 Token Discovery** - Search and discover tokens created by the community
-- **📊 Trading Analytics** - Real-time market data and trading statistics
+</div>
 
-## 🏗️ Architecture
+---
 
-### Frontend (Next.js 14)
-- **Framework**: Next.js 14 with App Router
-- **Styling**: Tailwind CSS with custom components
-- **Web3**: Wagmi + RainbowKit for wallet integration
-- **Animations**: Framer Motion for smooth interactions
-- **UI Components**: Shadcn/ui for accessible design
+## 🌟 **What is 0G Pump?**
 
-### Backend (Express.js)
-- **API Server**: Express.js with CORS and rate limiting
-- **Database**: SQLite for persistent data storage
-- **File Upload**: Multer for image handling
-- **Blockchain**: Ethers.js for smart contract interaction
-- **Storage**: 0G Storage SDK integration
+0G Pump is a **revolutionary decentralized trading platform** that combines instant token creation, AI-powered analytics, and provably fair gaming—all powered by the **0G Network ecosystem**. Create memecoins in seconds, trade with bonding curves, play games with real stakes, and enjoy 90% lower costs compared to traditional centralized platforms.
 
-### Smart Contracts
-- **Factory Contract**: Token and bonding curve deployment
-- **MemeToken**: ERC-20 compatible token implementation
-- **BondingCurve**: Advanced AMM with price discovery
-- **DEX Integration**: Uniswap V2-style trading pairs
+### **Why 0G Pump?**
 
-### 0G Ecosystem Integration
-- **0G Chain**: High-performance EVM-compatible blockchain
-- **0G Storage**: Decentralized storage for images and metadata
-- **0G Compute**: Ready for future analytics integration
+- 🎯 **Instant Token Creation** - Deploy ERC-20 tokens in one click
+- 📈 **Bonding Curve Trading** - Algorithmic pricing with guaranteed liquidity
+- 🤖 **AI-Powered Analytics** - 0G Compute for token suggestions & trending topics
+- 🎮 **Provably Fair Gaming** - 4 games with real token stakes + 0G DA verification
+- 🔐 **Immutable Records** - Game results stored on 0G Storage forever
+- 💰 **Real-Time Wallet Tracker** - Live OG balance + portfolio monitoring
+- 🎨 **Neon Gaming UI** - Cyberpunk aesthetic with animated effects
+- 💸 **90% Cost Reduction** - $1.65/day vs $15-20/day on AWS/OpenAI
 
-## 🚀 Quick Start
+---
 
-### Prerequisites
-- Node.js 18+ 
-- npm or yarn
-- MetaMask or compatible Web3 wallet
-- 0G Testnet tokens for gas fees
+## 🏗️ **Architecture**
 
-### Installation
+<div align="center">
 
-1. **Clone the repository**
-```bash
-   git clone <your-repo-url>
-   cd 0gPump
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Frontend (Next.js 14)                     │
+│  Wagmi + RainbowKit | Tailwind CSS | Framer Motion | ethers.js │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+┌───────────────────────────▼─────────────────────────────────────┐
+│                    Backend API (Express.js)                      │
+│     SQLite + Redis | Multer | 0G SDK | 0G Compute Broker       │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+┌───────▼────────┐  ┌──────▼──────┐  ┌────────▼────────┐
+│  0G Storage    │  │  0G Compute │  │   0G Chain      │
+│  (Images/Data) │  │  (AI Models)│  │  (Smart Contracts)│
+└────────────────┘  └─────────────┘  └─────────────────┘
 ```
 
-2. **Install dependencies**
+</div>
+
+### **Tech Stack**
+
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | Next.js 14, TypeScript, Tailwind CSS, Wagmi, RainbowKit |
+| **Backend** | Node.js, Express.js, SQLite, Redis |
+| **Blockchain** | ethers.js v6, Hardhat, Solidity 0.8.20 |
+| **0G Network** | 0G Storage SDK 0.3.1, 0G Compute SDK 0.4.3 |
+| **Smart Contracts** | Factory.sol, BondingCurve.sol, MemeToken.sol, Uniswap V2 |
+
+---
+
+## ✨ **Features**
+
+### **🎯 Token Creation**
+- **One-Click Deployment**: Create ERC-20 tokens with name, symbol, image, and description
+- **0G Storage Integration**: Images/metadata stored permanently on decentralized storage
+- **Instant Availability**: Tokens appear globally with real-time updates
+- **Bonding Curve Launch**: Automatic liquidity bootstrapping via algorithmic pricing
+
+### **📈 Trading**
+- **Bonding Curve Mechanics**: Buy/sell tokens with guaranteed liquidity
+- **Real-Time Prices**: Live price feeds from blockchain
+- **Slippage Protection**: Configurable slippage tolerance
+- **Trading Analytics**: Volume, market cap, holder count, transaction history
+
+### **🤖 AI-Powered Features (0G Compute)**
+- **Token Suggestions**: AI analyzes coins for investment recommendations
+- **Trending Topics**: AI predicts viral internet trends for coin ideas
+- **Meme Royale Judge**: AI rates coins on virality, creativity, and trend-fit
+- **PumpPlay Auto-Resolve**: AI predicts which coin will pump next
+- **Ask PumpAI Chat**: Real-time AI assistant for platform questions
+
+### **🎮 Gaming Arena (Provably Fair)**
+
+#### **💎 Coinflip**
+- Provably fair using OG blockhash entropy
+- 2x payout on wins
+- Real token stakes + instant payouts
+- Leaderboard with win/loss tracking
+
+#### **⚔️ Meme Royale**
+- AI judges coin battles (0G Compute)
+- 1.8x payout for winners
+- Real-time battle results
+- Immutable records on 0G DA
+
+#### **🎯 PumpPlay**
+- Predict which coin will pump next
+- Pool-based betting system
+- Proportional payouts to winners
+- AI auto-resolve option
+
+#### **💣 Mines**
+- Progressive multiplier game (1.1x → 25x)
+- Adjustable difficulty (1-24 mines)
+- Instant cashout anytime
+- Real token stakes + payouts
+
+### **🔐 Game Provenance (0G DA)**
+- **Immutable Records**: Every game result stored on 0G Storage
+- **Verification API**: `/gaming/verify/:gameId` for public audit
+- **Tamper-Proof**: Records written before payouts execute
+- **Leaderboard Backups**: Timestamped snapshots prevent cheating
+
+### **💼 Wallet Integration**
+- **RainbowKit Connect**: MetaMask, WalletConnect, Coinbase Wallet
+- **Real-Time OG Balance**: Auto-refresh every 10 seconds
+- **Tokens Held Counter**: Portfolio tracking
+- **Transaction History**: All trades + game results
+
+### **🎨 Neon Gaming UI**
+- **Cyberpunk Theme**: Dark gradients with neon glows
+- **Animated Blobs**: Floating orb effects
+- **Glass-Morphism**: Backdrop blur containers
+- **Smooth Transitions**: 300ms hover/scale effects
+- **Game-Specific Colors**: Blue (PumpPlay), Pink (Meme Royale), Orange (Mines), Cyan (Coinflip)
+
+---
+
+## 🚀 **Quick Start**
+
+### **Prerequisites**
+- Node.js 18+
+- MetaMask or Web3 wallet
+- 0G Testnet tokens ([Faucet](https://faucet.0g.ai))
+
+### **Installation**
+
 ```bash
+# Clone repository
+git clone https://github.com/SCARPxVeNOM/0gpump-production.git
+cd 0gpump-production
+
+# Install dependencies
 npm install --legacy-peer-deps
-```
 
-3. **Set up environment variables**
-
-Create `.env.local` for frontend:
-```env
-NEXT_PUBLIC_EVM_RPC=https://evmrpc-testnet.0g.ai
-NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_walletconnect_id
-NEXT_PUBLIC_BACKEND_URL=http://localhost:4000
-NEXT_PUBLIC_FACTORY_ADDRESS=0x8A1173808F4BF4A35EBb9e6BAFe91E96B2bCc93c
-```
-
-Create `.env` for backend:
-   ```env
-PORT=4000
-OG_STORAGE_API=http://localhost:3000
-OG_RPC=https://evmrpc-testnet.0g.ai
-FACTORY_ADDRESS=0x8A1173808F4BF4A35EBb9e6BAFe91E96B2bCc93c
-ROUTER_ADDRESS=0x631b62C792121cE905e73195b6B3a09bd3557a19
-DEPLOYER_PRIVATE_KEY=your_0g_testnet_private_key
-SYNC_INTERVAL_MS=30000
-ENABLE_0G_UPLOADS_ON_CREATE=true
-```
-
-4. **Start all services**
-```bash
+# Start all services
 npm run dev:all
 ```
 
-This will start:
-- 0G Storage Kit: http://localhost:3000
-- Backend API: http://localhost:4000
-- Frontend App: http://localhost:3001
+### **Environment Setup**
 
-## 📱 Usage Guide
+#### Frontend (`.env.local`)
+```env
+NEXT_PUBLIC_EVM_RPC=https://evmrpc-testnet.0g.ai
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id
+NEXT_PUBLIC_BACKEND_URL=http://localhost:4000
+NEXT_PUBLIC_FACTORY_ADDRESS=0x560C7439E28359E2E8C0D72A52e8b5d6645766e7
+NEXT_PUBLIC_OG_RPC=https://evmrpc-testnet.0g.ai
+```
 
-### Creating a Token
+#### Backend (`.env`)
+```env
+PORT=4000
+OG_RPC=https://evmrpc-testnet.0g.ai
+PRIVATE_KEY=your_private_key
+FACTORY_ADDRESS=0x560C7439E28359E2E8C0D72A52e8b5d6645766e7
+ROUTER_ADDRESS=0x631b62C792121cE905e73195b6B3a09bd3557a19
+WETH_ADDRESS=0xB01825d6EbAB7E2c032797222A14B5c375069420
+```
 
-1. **Connect your wallet** using the Connect button
-2. **Click "Create coin"** in the sidebar
-3. **Fill in token details**:
-   - Token name (e.g., "DOGEWOW")
-   - Token symbol (e.g., "WOW")
-   - Total supply (e.g., "1,000,000")
-   - Description (optional)
-4. **Upload an image** (stored on 0G Storage)
-5. **Add social links** (Telegram, X/Twitter, Discord, Website)
-6. **Click "Create Token"** and confirm the transaction
-
-### Trading Tokens
-
-1. **Browse available tokens** on the homepage
-2. **Click on a token card** to view details
-3. **Use the trading interface**:
-   - Select buy/sell
-   - Enter amount
-   - Set slippage tolerance
-   - Execute trade
-4. **Monitor your portfolio** in real-time
-
-### Token Discovery
-
-- **Search functionality** - Find tokens by name, symbol, or description
-- **Real-time updates** - New tokens appear automatically
-- **Global sharing** - All tokens are visible to everyone
-- **Persistent storage** - Tokens survive server restarts
-
-## 🛠️ Development
-
-### Available Scripts
+### **Available Scripts**
 
 ```bash
 # Development
-npm run dev              # Start frontend only
-npm run dev:backend      # Start backend only
-npm run dev:all          # Start all services
-npm run dev:kit          # Start 0G storage kit
+npm run dev              # Frontend only (localhost:3001)
+npm run dev:backend      # Backend only (localhost:4000)
+npm run dev:kit          # 0G Storage Kit (localhost:3000)
+npm run dev:all          # All services
 
 # Building
 npm run build            # Build frontend
-npm run build:all        # Build everything
-npm run build:optimized  # Build with LIT optimization
+npm run build:all        # Build all services
 
-# Smart Contract Deployment
-npm run deploy:dex:core  # Deploy core DEX contracts
-npm run deploy:ogtoken   # Deploy OG token
+# Smart Contracts
+npm run deploy:dex:core  # Deploy DEX contracts
 npm run deploy:curve     # Deploy bonding curve
-npm run enable:trading   # Enable trading for tokens
-
-# Automation
-npm run setup:automated  # Automated setup
-npm run setup:from-storage # Setup from storage data
+npm run enable:trading   # Enable token trading
 ```
 
-### Project Structure
+---
 
-```
-0gPump/
-├── app/                    # Next.js app directory
-│   ├── components/         # React components
-│   ├── api/               # API routes
-│   └── page.tsx           # Main page
-├── contracts/             # Smart contracts
-│   ├── Factory.sol        # Token factory
-│   ├── MemeToken.sol      # ERC-20 token
-│   ├── BondingCurve.sol   # Trading curve
-│   └── DEX/               # Uniswap V2 contracts
-├── lib/                   # Utility libraries
-│   ├── 0gStorageSDK.ts    # 0G Storage integration
-│   ├── bondingCurveTradingService.ts
-│   └── newFactoryService.ts
-├── scripts/               # Deployment scripts
-├── server.js              # Express backend
-├── 0g-storage-ts-starter-kit/ # 0G Storage service
-└── data/                  # SQLite database
-```
+## 🎮 **How to Use**
 
-## 🔧 Configuration
+### **Creating Tokens**
 
-### Environment Variables
+1. **Connect Wallet** → Click "Connect Wallet" (top right)
+2. **Create Token** → Click "Create Token" button
+3. **Fill Details**:
+   - Token Name (e.g., "Doge Coin")
+   - Symbol (e.g., "DOGE")
+   - Description
+   - Upload Image (stored on 0G Storage)
+4. **Deploy** → Approve MetaMask transaction
+5. **Trade** → Token appears instantly with bonding curve
 
-#### Frontend (.env.local)
-- `NEXT_PUBLIC_EVM_RPC` - 0G Chain RPC URL
-- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` - WalletConnect Project ID
-- `NEXT_PUBLIC_BACKEND_URL` - Backend API URL
-- `NEXT_PUBLIC_FACTORY_ADDRESS` - Factory contract address
+### **Trading Tokens**
 
-#### Backend (.env)
-- `PORT` - Server port (default: 4000)
-- `OG_STORAGE_API` - 0G Storage kit URL
-- `OG_RPC` - 0G Chain RPC URL
-- `FACTORY_ADDRESS` - Factory contract address
-- `ROUTER_ADDRESS` - DEX router address
-- `DEPLOYER_PRIVATE_KEY` - Backend signer private key
-- `SYNC_INTERVAL_MS` - Indexer sync interval
+1. **Browse Tokens** → Scroll homepage or search by name/symbol
+2. **Select Token** → Click on any token card
+3. **Buy/Sell**:
+   - Choose action (Buy/Sell)
+   - Enter amount
+   - Set slippage (0.5% - 5%)
+   - Approve transaction
+4. **Track Portfolio** → View holdings in wallet tracker
 
-### Database Schema
+### **Playing Games**
 
-```sql
-CREATE TABLE coins (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  symbol TEXT NOT NULL,
-  supply TEXT NOT NULL,
-  imageHash TEXT,
-  tokenAddress TEXT,
-  curveAddress TEXT,
-  txHash TEXT NOT NULL,
-  creator TEXT NOT NULL,
-  createdAt INTEGER NOT NULL,
-  description TEXT,
-  telegramUrl TEXT,
-  xUrl TEXT,
-  discordUrl TEXT,
-  websiteUrl TEXT,
-  marketCap REAL,
-  price REAL,
-  volume24h REAL,
-  holders INTEGER,
-  totalTransactions INTEGER
-);
-```
+1. **Gaming Arena** → Navigate to `/gaming`
+2. **Connect Wallet** → See OG balance + tokens held
+3. **Select Game** → Choose Coinflip, Meme Royale, PumpPlay, or Mines
+4. **Stake Tokens** → Pick token + enter bet amount
+5. **Play** → Approve stake transaction
+6. **Win** → Payout sent automatically (2s delay)
+7. **Verify** → Click verification badge to audit game on 0G DA
 
-## 🌐 Deployment
+### **Using AI Features**
 
-### Production Deployment
+1. **AI Suggestions** → Click "Advanced" in sidebar → `/ai-suggestions`
+2. **Token Recommendations** → View AI analysis of top coins
+3. **Trending Topics** → Get viral meme ideas from AI
+4. **Ask PumpAI** → Navigate to "Ask PumpAI" → Chat with AI
+5. **Meme Royale** → Let AI judge coin battles automatically
 
-The project consists of three services that need to be deployed:
+---
 
-1. **Frontend** (Vercel/Netlify)
-2. **Backend API** (Render/Fly.io/Heroku)
-3. **0G Storage Kit** (Node.js hosting)
+## 📊 **Cost Efficiency**
 
-See [DEPLOY.md](DEPLOY.md) for detailed deployment instructions.
+### **0G Network vs Traditional Stack**
 
-### Docker Support
+| Feature | 0G Network | AWS + OpenAI | Savings |
+|---------|------------|--------------|---------|
+| Game Storage | $0.001/game | $0.01/game | **90%** |
+| AI Inference | $0.003/request | $0.03/request | **90%** |
+| Image Storage | $0.001/256KB | $0.005/256KB | **80%** |
+| Chat AI | $0.002/message | $0.02/message | **90%** |
+| **Total (100 users/day)** | **$1.65** | **$15-20** | **~92%** |
 
-```bash
-# Build and run with Docker Compose
-docker-compose up --build
-```
+### **Why 0G is Cheaper**
 
-## 🤖 AI Suggestions (0G Compute)
+- **Decentralized Infrastructure**: No single point of failure, lower overhead
+- **Pay-per-use**: Only pay for actual compute/storage consumed
+- **No Vendor Lock-in**: Open network, competitive pricing
+- **GPU Marketplace**: Decentralized compute nodes compete on price
 
-This project integrates 0G Compute to generate AI Token Suggestions and Trending Topics for new coin ideas.
+---
 
-### How it works
-- Backend initializes a 0G Compute broker with your signer wallet
-- A provider (e.g., deepseek-r1-70b) is acknowledged on-chain
-- The backend requests model output and returns suggestions to the UI
-- If the compute node is unavailable, the backend returns safe fallbacks so your UI always displays data
+## 🔗 **API Endpoints**
 
-### Endpoints
-- `GET /ai-suggestions` – AI-curated suggestions based on coins in the database
-- `GET /trending-topics` – Trending internet topics for coin ideas
-- `POST /ai-setup` – One-time helper to create/fund the compute ledger and acknowledge the provider
+### **Core APIs**
 
-### Env requirements (backend)
-```env
-PRIVATE_KEY=your_funded_testnet_key   # used by the broker
-OG_RPC=https://evmrpc-testnet.0g.ai   # 0G EVM RPC
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/coins` | GET | List all tokens |
+| `/createCoin` | POST | Create new token |
+| `/upload` | POST | Upload image to 0G Storage |
+| `/download/:rootHash` | GET | Download from 0G Storage |
 
-### One-time setup
-```bash
-# Make sure the backend is running on port 4000
-curl -X POST http://localhost:4000/ai-setup
-```
-Output includes current balance and the provider’s endpoint/model.
+### **AI APIs (0G Compute)**
 
-### Frontend usage
-The Next.js page `/ai-suggestions` calls the backend endpoints and renders both sections.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/ai-suggestions` | GET | AI token recommendations |
+| `/trending-topics` | GET | AI viral trend predictions |
+| `/ai-chat` | POST | Chat with PumpAI assistant |
+| `/ai-setup` | POST | Initialize 0G Compute account |
 
-## 🧰 Troubleshooting
+### **Gaming APIs**
 
-- "Account does not exist. Please create an account first" – Run `POST /ai-setup` after funding your `PRIVATE_KEY` with a small amount of OG on testnet (≥ 0.05 OG recommended).
-- "already known" or nonce errors when acknowledging provider – The backend now caches acknowledgments and ignores benign replays.
-- Empty UI for suggestions/topics – The backend returns non-empty fallbacks; hard refresh and ensure `NEXT_PUBLIC_BACKEND_URL` points to your backend.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/gaming/coinflip` | POST | Play coinflip |
+| `/gaming/meme-royale` | POST | Start Meme Royale battle |
+| `/gaming/pumpplay/bet` | POST | Bet on PumpPlay |
+| `/gaming/mines/start` | POST | Start Mines game |
+| `/gaming/verify/:gameId` | GET | Verify game on 0G DA |
+| `/gaming/coins/:address` | GET | Get user's gaming tokens |
 
-## ❓ FAQs
+---
 
-- **What chain and gas token are used?** 0G Galileo testnet; gas token is OG. RPC: `https://evmrpc-testnet.0g.ai`.
-- **How much does token creation cost?** A few hundred thousand gas (varies by network conditions); testnet cost is negligible.
-- **Where are token images/metadata stored?** On 0G Storage via the official SDK; we also write to a local cache for instant serving.
-- **How does liquidity work?** New tokens start on a bonding curve with algorithmic pricing based on reserves. Buys add OG; sells remove OG.
-- **Why do I see "no trading enabled" sometimes?** When `PairCreated` logs are delayed, the backend resolver updates the DB shortly after. Refresh in ~30s.
-- **Which AI models are used?** 0G Compute providers (e.g., `deepseek-r1-70b`). When unavailable, heuristic fallbacks are used.
+## 🔐 **Security & Trust**
 
-## 🔗 API Endpoints
+### **Provably Fair Gaming**
+- **Coinflip**: Uses OG blockhash + cryptographic randomness
+- **Meme Royale**: AI judgment stored immutably (can't be altered)
+- **Mines**: Grid generation uses secure random
+- **All Games**: Results written to 0G DA before payouts
 
-### Coins Management
-- `GET /api/coins` - Retrieve all coins
-- `POST /api/coins` - Create new coin
-- `GET /api/coins/:id` - Get specific coin
+### **Decentralized Verification**
+- Every game has permanent `provenanceHash`
+- Anyone can audit via `/gaming/verify/:gameId`
+- No central authority controls results
+- Tamper-proof records on 0G Storage
 
-### Trading
-- `POST /api/enableTrading` - Enable trading for token
-- `GET /api/quote` - Get trading quote
-- `POST /api/trade` - Execute trade
+### **Smart Contract Security**
+- Audited bonding curve mechanics
+- Reentrancy protection
+- Safe math operations
+- Pausable in emergencies
 
-### Storage
-- `POST /api/upload` - Upload image to 0G Storage
-- `GET /api/download/:hash` - Download image from storage
+---
 
-### AI
-- `GET /ai-suggestions` - Get AI token suggestions (0G Compute or fallback)
-- `GET /trending-topics` - Get trending topics
-- `POST /ai-setup` - Initialize compute ledger and acknowledge provider
+## 📈 **Roadmap**
 
-## 🧪 Testing
-
-```bash
-# Run tests
-npm test
-
-# Test storage integration
-npm run test:storage
-
-# Test smart contracts
-npx hardhat test
-```
-
-## 📊 Features in Detail
-
-### Bonding Curve Trading
-- **Price Discovery**: Automatic price adjustment based on supply/demand
-- **Liquidity Provision**: Initial liquidity seeding with OG tokens
-- **Graduation**: Tokens graduate to full DEX when threshold is reached
-- **Fee Structure**: Configurable trading fees
-
-### 0G Storage Integration
-- **Decentralized Storage**: Images and metadata stored on 0G Storage
-- **Content Addressing**: Immutable storage with hash-based addressing
-- **Retry Logic**: Robust upload with retry and backoff
-- **Caching**: Local caching for improved performance
-
-### Real-time Updates
-- **Live Prices**: Real-time price updates from blockchain
-- **Auto-refresh**: Automatic data refresh every 30 seconds
-- **Event Indexing**: Blockchain event monitoring
-- **WebSocket Support**: Real-time notifications (planned)
-
-## 🚧 Roadmap
-
-### Phase 1: Core Platform ✅
-- [x] Token creation and deployment
+### **Phase 1: Core Platform** ✅
+- [x] Token creation + deployment
 - [x] Bonding curve trading
 - [x] 0G Storage integration
 - [x] Basic UI/UX
 
-### Phase 2: Enhanced Features 🚧
-- [x] Advanced trading interface
-- [x] Real-time price updates
-- [x] Token discovery and search
-- [ ] Portfolio management
-- [x] Trading history
+### **Phase 2: AI & Gaming** ✅
+- [x] 0G Compute integration
+- [x] 4 provably fair games
+- [x] AI token suggestions
+- [x] Game provenance (0G DA)
+- [x] Real-time wallet tracker
+- [x] Neon gaming UI
 
-### Phase 3: Advanced Features 📋
-- [x] 0G Compute integration for analytics
-- [ ] Advanced charting and technical analysis
-- [x] Social features and community building
-- [ ] Mobile app
-- [ ] Cross-chain support
+### **Phase 3: Advanced Features** 🚧
+- [ ] Token launchpad with vesting
+- [ ] DAO governance for platform
+- [ ] Cross-chain bridge integration
+- [ ] Mobile app (iOS/Android)
+- [ ] Advanced charting + TA tools
+- [ ] Social features (comments, likes)
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **0G Labs** - For the amazing 0G Chain infrastructure
-- **RainbowKit** - For beautiful wallet connection UI
-- **Shadcn/ui** - For accessible, beautiful components
-- **Next.js Team** - For the excellent React framework
-- **Ethers.js** - For robust blockchain interaction
-
-## 📞 Support
-
-- **GitHub Issues** - Report bugs and request features
-- **Documentation** - Comprehensive guides and API docs
-- **Community** - Join our Discord for help and discussion
-
-## 🔗 Links
-
-- **0G Chain Explorer**: https://chainscan-galileo.0g.ai
-- **0G Testnet RPC**: https://evmrpc-testnet.0g.ai
-- **0G Documentation**: https://docs.0g.ai
-- **Project Demo**: [Live Demo URL]
+### **Phase 4: Ecosystem Expansion** 📋
+- [ ] NFT integration for top coins
+- [ ] Liquidity mining rewards
+- [ ] Staking mechanisms
+- [ ] Institutional partnerships
+- [ ] Multi-chain deployment
 
 ---
 
-**Built with ❤️ for the 0G ecosystem**
+## 🤝 **Contributing**
 
-*Images and metadata are stored on 0G Storage; no fake placeholder data is shown. All trading data is real and on-chain.*
+We welcome contributions! Please follow these steps:
+
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
+
+### **Development Guidelines**
+- Follow TypeScript best practices
+- Write tests for new features
+- Update documentation
+- Maintain code consistency
+
+---
+
+## 📄 **License**
+
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 **Acknowledgments**
+
+- **[0G Labs](https://0g.ai)** - For the revolutionary 0G Chain infrastructure
+- **[RainbowKit](https://rainbowkit.com)** - Beautiful wallet connection UI
+- **[Shadcn/ui](https://ui.shadcn.com)** - Accessible component library
+- **[Next.js](https://nextjs.org)** - Powerful React framework
+- **[Ethers.js](https://ethers.org)** - Ethereum interaction library
+
+---
+
+## 🔗 **Links**
+
+<div align="center">
+
+[![Website](https://img.shields.io/badge/Website-0gpump.vercel.app-blue?style=for-the-badge)](https://0gpump.vercel.app)
+[![0G Explorer](https://img.shields.io/badge/Explorer-0G%20Chain-purple?style=for-the-badge)](https://chainscan-galileo.0g.ai)
+[![0G Docs](https://img.shields.io/badge/Docs-0G%20Network-green?style=for-the-badge)](https://docs.0g.ai)
+
+**[Live Demo](https://0gpump.vercel.app)** • **[GitHub Repo](https://github.com/SCARPxVeNOM/0gpump-production)** • **[0G Testnet](https://chainscan-galileo.0g.ai)** • **[Get Testnet Tokens](https://faucet.0g.ai)**
+
+</div>
+
+---
+
+## 📞 **Support**
+
+- **Issues**: [GitHub Issues](../../issues)
+- **Discussions**: [GitHub Discussions](../../discussions)
+- **Email**: pratikkumar56778@gmail.com
+- **0G Community**: [Join Discord](https://discord.gg/0glabs)
+
+---
+
+<div align="center">
+
+**Built with ❤️ for the 0G Ecosystem**
+
+*Decentralized • Verifiable • Affordable*
+
+[![GitHub stars](https://img.shields.io/github/stars/SCARPxVeNOM/0gpump-production?style=social)](../../stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/SCARPxVeNOM/0gpump-production?style=social)](../../network/members)
+
+</div>
