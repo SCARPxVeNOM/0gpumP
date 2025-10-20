@@ -999,7 +999,7 @@ app.post('/ai-setup', async (req, res) => {
 });
 
 /**
- * CREATE COIN ENDPOINT - Enhanced with Professional Architecture
+ * CREATE COIN ENDPOINT - Enhanced with Professional Architecture + 0G Storage Backup
  */
 app.post("/createCoin", upload.single("image"), async (req, res) => {
   try {
@@ -1077,6 +1077,27 @@ app.post("/createCoin", upload.single("image"), async (req, res) => {
     // Save coin using professional data service
     await dataService.upsertCoin(coinData);
 
+    // 🔥 NEW: Upload coin metadata to 0G Storage for permanent backup
+    try {
+      console.log(`📦 Backing up coin metadata to 0G Storage...`);
+      const metadataBuffer = Buffer.from(JSON.stringify(coinData, null, 2));
+      const metadataUpload = await uploadBufferDirect(metadataBuffer, `coin_${coinData.id}.json`);
+      coinData.metadataHash = metadataUpload.rootHash;
+      coinData.metadataUrl = `/download/${metadataUpload.rootHash}`;
+      
+      // Update coin with metadata hash
+      await dataService.upsertCoin(coinData);
+      
+      // Update coin index for future restoration
+      await loadCoinIndex();
+      coinIndex.set(coinData.id, metadataUpload.rootHash);
+      await saveCoinIndex();
+      
+      console.log(`✅ Coin metadata backed up to 0G Storage: ${metadataUpload.rootHash}`);
+    } catch (backupError) {
+      console.warn(`⚠️ Failed to backup coin metadata to 0G Storage (coin still created):`, backupError.message);
+    }
+
     console.log(`✅ Coin created successfully: ${name} (${symbol})`);
 
     res.json({
@@ -1091,7 +1112,7 @@ app.post("/createCoin", upload.single("image"), async (req, res) => {
 });
 
 /**
- * GET COINS ENDPOINT - Enhanced with Caching
+ * GET COINS ENDPOINT - Enhanced with Caching + 0G Storage Restoration
  */
 app.get("/coins", async (req, res) => {
   try {
@@ -1126,6 +1147,159 @@ app.get("/coins", async (req, res) => {
   } catch (error) {
     console.error("Get coins error:", error);
     res.status(500).json({ error: "Failed to get coins" });
+  }
+});
+
+/**
+ * 0G STORAGE COIN BACKUP & RESTORATION ENDPOINTS
+ */
+
+// Master coin index on 0G Storage (stores list of all coin metadata hashes)
+const COIN_INDEX_FILE = path.join(process.cwd(), 'data', 'coin-index-0g.json');
+let coinIndex = new Map(); // coinId -> metadataHash
+
+async function loadCoinIndex() {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(COIN_INDEX_FILE)) {
+      const raw = fs.readFileSync(COIN_INDEX_FILE, 'utf8');
+      const obj = JSON.parse(raw || '{}');
+      coinIndex = new Map(Object.entries(obj));
+      console.log(`📇 Coin index loaded (${coinIndex.size} entries)`);
+    } else {
+      coinIndex = new Map();
+      console.log('ℹ️  No existing coin index found. A new one will be created.');
+    }
+  } catch (e) {
+    console.warn('⚠️ Failed to load coin index:', e?.message || e);
+    coinIndex = new Map();
+  }
+}
+
+async function saveCoinIndex() {
+  try {
+    ensureDataDir();
+    const obj = Object.fromEntries(coinIndex);
+    fs.writeFileSync(COIN_INDEX_FILE, JSON.stringify(obj, null, 2));
+  } catch (e) {
+    console.warn('⚠️ Failed to save coin index:', e?.message || e);
+  }
+}
+
+// Sync all coins to 0G Storage (backup endpoint)
+app.post('/coins/sync-to-0g', async (req, res) => {
+  try {
+    console.log('🔄 Starting 0G Storage sync for all coins...');
+    await loadCoinIndex();
+    
+    const db = await databaseManager.getConnection();
+    const allCoins = await db.all('SELECT * FROM coins');
+    
+    let syncedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    
+    for (const coin of allCoins) {
+      try {
+        // Skip if already synced
+        if (coin.metadataHash && coinIndex.has(coin.id)) {
+          console.log(`⏭️  Skipping ${coin.symbol} (already on 0G Storage)`);
+          skippedCount++;
+          continue;
+        }
+        
+        // Upload coin metadata to 0G Storage
+        const metadataBuffer = Buffer.from(JSON.stringify(coin, null, 2));
+        const metadataUpload = await uploadBufferDirect(metadataBuffer, `coin_${coin.id}.json`);
+        
+        // Update database with metadata hash
+        await db.run(
+          'UPDATE coins SET metadataHash = ?, metadataUrl = ? WHERE id = ?',
+          [`${metadataUpload.rootHash}`, `/download/${metadataUpload.rootHash}`, coin.id]
+        );
+        
+        // Update coin index
+        coinIndex.set(coin.id, metadataUpload.rootHash);
+        
+        console.log(`✅ Synced ${coin.symbol} to 0G Storage: ${metadataUpload.rootHash}`);
+        syncedCount++;
+      } catch (error) {
+        console.error(`❌ Failed to sync ${coin.symbol}:`, error.message);
+        errorCount++;
+      }
+    }
+    
+    await saveCoinIndex();
+    
+    res.json({
+      success: true,
+      message: `Synced ${syncedCount} coins to 0G Storage`,
+      stats: {
+        total: allCoins.length,
+        synced: syncedCount,
+        skipped: skippedCount,
+        errors: errorCount
+      }
+    });
+  } catch (error) {
+    console.error('0G Storage sync error:', error);
+    res.status(500).json({ error: 'Failed to sync coins to 0G Storage' });
+  }
+});
+
+// Restore coins from 0G Storage (useful after database reset or for new nodes)
+app.post('/coins/restore-from-0g', async (req, res) => {
+  try {
+    console.log('📥 Starting coin restoration from 0G Storage...');
+    await loadCoinIndex();
+    
+    if (coinIndex.size === 0) {
+      return res.json({
+        success: true,
+        message: 'No coins to restore (coin index is empty)',
+        restored: 0
+      });
+    }
+    
+    let restoredCount = 0;
+    let errorCount = 0;
+    
+    for (const [coinId, metadataHash] of coinIndex.entries()) {
+      try {
+        // Download coin metadata from 0G Storage
+        await initializeOGSdkOnce();
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), '0g-coin-restore-'));
+        const tempFile = path.join(tempDir, `${coinId}.json`);
+        
+        const err = await ogIndexer.download(metadataHash, tempFile, true);
+        if (err) throw new Error(String(err));
+        
+        const coinData = JSON.parse(fs.readFileSync(tempFile, 'utf8'));
+        try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {}
+        
+        // Upsert coin into database
+        await dataService.upsertCoin(coinData);
+        
+        console.log(`✅ Restored ${coinData.symbol} from 0G Storage`);
+        restoredCount++;
+      } catch (error) {
+        console.error(`❌ Failed to restore coin ${coinId}:`, error.message);
+        errorCount++;
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Restored ${restoredCount} coins from 0G Storage`,
+      stats: {
+        total: coinIndex.size,
+        restored: restoredCount,
+        errors: errorCount
+      }
+    });
+  } catch (error) {
+    console.error('Coin restoration error:', error);
+    res.status(500).json({ error: 'Failed to restore coins from 0G Storage' });
   }
 });
 
@@ -1916,6 +2090,29 @@ app.post("/cache/clear", async (req, res) => {
   }
 });
 
+// Fix coin image data endpoint
+app.post('/fix-coin-image', async (req, res) => {
+  try {
+    const { coinId, imageHash, imageUrl } = req.body;
+    if (!coinId || !imageHash) {
+      return res.status(400).json({ success: false, error: 'coinId and imageHash are required' });
+    }
+
+    await dataService.initialize();
+    const db = await databaseManager.getConnection();
+    
+    await db.run(
+      `UPDATE coins SET imageHash = ?, imageUrl = ?, updatedAt = ? WHERE id = ?`,
+      [imageHash, imageUrl || `/download/${imageHash}`, Date.now(), coinId]
+    );
+
+    res.json({ success: true, message: 'Coin image data updated' });
+  } catch (e) {
+    console.error('Fix coin image error:', e);
+    res.status(500).json({ success: false, error: e?.message || 'Failed to fix coin image' });
+  }
+});
+
 app.post('/resolvePair', async (req, res) => {
   try {
     const { txHash, creator, factory } = req.body || {}
@@ -1985,11 +2182,23 @@ app.post('/resolvePair', async (req, res) => {
       await dataService.initialize()
       const db = await databaseManager.getConnection()
       // Update the most recent coin by this creator with empty curveAddress
-      await db.run(
-        `UPDATE coins SET tokenAddress = COALESCE(tokenAddress, ?), curveAddress = ?, updatedAt = ?
+      // First, get the existing coin data to preserve image information
+      const existingCoin = await db.get(
+        `SELECT imageHash, imageUrl FROM coins 
          WHERE creator = ? AND (curveAddress IS NULL OR curveAddress = '')
          ORDER BY createdAt DESC LIMIT 1`,
-        [tokenAddr, curveAddr, Date.now(), String(creator).toLowerCase()]
+        [String(creator).toLowerCase()]
+      )
+      
+      // Update with preserved image data
+      await db.run(
+        `UPDATE coins SET tokenAddress = COALESCE(tokenAddress, ?), curveAddress = ?, updatedAt = ?,
+         imageHash = COALESCE(imageHash, ?), imageUrl = COALESCE(imageUrl, ?)
+         WHERE creator = ? AND (curveAddress IS NULL OR curveAddress = '')
+         ORDER BY createdAt DESC LIMIT 1`,
+        [tokenAddr, curveAddr, Date.now(), 
+         existingCoin?.imageHash || null, existingCoin?.imageUrl || null,
+         String(creator).toLowerCase()]
       )
     } catch (e) {
       console.warn('DB update skipped:', e?.message || e)
@@ -2012,6 +2221,40 @@ async function startServer() {
     // Initialize professional database architecture
     await initializeDatabase();
     
+    // Load coin index from disk
+    await loadCoinIndex();
+    
+    // Auto-restore coins from 0G Storage on startup (if database is empty)
+    const db = await databaseManager.getConnection();
+    const coinCount = await db.get('SELECT COUNT(*) as count FROM coins');
+    
+    if (coinCount.count === 0 && coinIndex.size > 0) {
+      console.log('🔄 Database is empty but coin index exists. Auto-restoring from 0G Storage...');
+      
+      let restoredCount = 0;
+      for (const [coinId, metadataHash] of coinIndex.entries()) {
+        try {
+          await initializeOGSdkOnce();
+          const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), '0g-coin-restore-'));
+          const tempFile = path.join(tempDir, `${coinId}.json`);
+          
+          const err = await ogIndexer.download(metadataHash, tempFile, true);
+          if (!err) {
+            const coinData = JSON.parse(fs.readFileSync(tempFile, 'utf8'));
+            await dataService.upsertCoin(coinData);
+            restoredCount++;
+          }
+          try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {}
+        } catch (error) {
+          console.warn(`⚠️ Failed to restore coin ${coinId}:`, error.message);
+        }
+      }
+      
+      if (restoredCount > 0) {
+        console.log(`✅ Auto-restored ${restoredCount} coins from 0G Storage`);
+      }
+    }
+    
     // Start the server
 app.listen(PORT, () => {
       console.log(`🚀 Professional 0G Storage Integration Server running on http://localhost:${PORT}`);
@@ -2023,6 +2266,8 @@ app.listen(PORT, () => {
   console.log(`🔎 Resolve new pair: POST /resolvePair`);
       console.log(`👤 Profile endpoints: GET/PUT /profile/:walletAddress`);
       console.log(`📊 Market data: GET /market/stats`);
+      console.log(`🔄 0G Storage sync: POST /coins/sync-to-0g`);
+      console.log(`📥 0G Storage restore: POST /coins/restore-from-0g`);
   console.log(`💚 Health check: GET /health`);
   console.log(`🔗 0G Storage API: ${OG_STORAGE_API}`);
       console.log(`⚡ Redis caching: Enabled with fallback`);

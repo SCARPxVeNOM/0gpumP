@@ -28,7 +28,8 @@ export default function CoinImage({ coin, size = 'md', className = '' }: CoinIma
       imageUrl: coin.imageUrl,
       imageHash: (coin as any).imageHash,
       imageRootHash: (coin as any).imageRootHash,
-      coinName: coin.name
+      coinName: coin.name,
+      coinSymbol: coin.symbol
     });
 
     // Preferred: explicit URL
@@ -53,14 +54,22 @@ export default function CoinImage({ coin, size = 'md', className = '' }: CoinIma
       return
     }
 
-    console.log('CoinImage: No image data found, showing fallback');
+    console.log('CoinImage: No image data found, showing fallback for', coin.name);
     setImageSrc(null)
   }, [coin.imageUrl, (coin as any).imageHash, (coin as any).imageRootHash, backendBase])
 
   if (imageSrc) {
     return (
       <div className={`${sizeClasses[size]} rounded-2xl border-2 border-purple-500/50 overflow-hidden shadow-lg ${className}`}>
-        <img src={imageSrc} alt={coin.name} className="w-full h-full object-cover" />
+        <img 
+          src={imageSrc} 
+          alt={coin.name} 
+          className="w-full h-full object-cover" 
+          onError={(e) => {
+            console.log('CoinImage: Image failed to load:', imageSrc, 'for coin:', coin.name);
+            setImageSrc(null);
+          }}
+        />
       </div>
     )
   }

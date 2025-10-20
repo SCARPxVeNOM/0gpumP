@@ -115,6 +115,13 @@ export default function App() {
                 discordUrl: c.discordUrl,
                 websiteUrl: c.websiteUrl,
               })) as ExtendedCoinData[];
+              
+              console.log('🔍 Loaded coins with image data:', mapped.map(c => ({
+                name: c.name,
+                imageUrl: c.imageUrl,
+                imageHash: c.imageHash,
+                imageRootHash: c.imageRootHash
+              })));
               const sorted = [...mapped].sort((a,b) => new Date(b.createdAt as any).getTime() - new Date(a.createdAt as any).getTime())
               setAllCoins(sorted);
               setTrendingCoins(sorted);
@@ -397,6 +404,27 @@ export default function App() {
               </div>
             </div>
           )}
+
+          {/* 0G Storage Info Banner */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 bg-gradient-to-r from-purple-500/10 via-blue-500/10 to-green-500/10 backdrop-blur-xl rounded-2xl p-4 border border-purple-500/20"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center">
+                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-purple-300">Powered by 0G Storage</h3>
+                <p className="text-xs text-slate-400">
+                  All coins are permanently backed up to decentralized storage. Perfect for gaming platforms - your tokens persist forever! 🎮
+                </p>
+              </div>
+            </div>
+          </motion.div>
 
           {/* Portfolio Section - Removed fake data */}
           {mounted && isConnected && (
