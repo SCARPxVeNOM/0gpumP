@@ -1573,8 +1573,42 @@ app.get("/profile/:walletAddress", async (req, res) => {
     console.log(`📤 Returning profile for ${walletAddress}:`, {
       hasProfile: !!profile,
       hasTokensCreated: !!(profile?.tokensCreated),
-      tokensCount: profile?.tokensCreated?.length || 0
+      tokensCount: profile?.tokensCreated?.length || 0,
+      profileType: typeof profile,
+      profileKeys: profile ? Object.keys(profile) : 'null'
     });
+    
+    // Ensure we always return a full profile object, not just a hash
+    if (profile && typeof profile === 'object' && profile.profileHash && !profile.walletAddress) {
+      console.log(`⚠️ Profile is just a hash, creating new profile`);
+      // This is just a hash, create a new profile
+      profile = {
+        walletAddress: walletAddress.toLowerCase(),
+        username: `User_${walletAddress.slice(0, 6)}`,
+        bio: 'Welcome to OG Pump! 🚀',
+        avatarUrl: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tokensCreated: [],
+        tradingStats: {
+          totalTrades: 0,
+          totalVolume: 0,
+          tokensHeld: 0,
+          favoriteTokens: [],
+          lastTradeAt: null
+        },
+        preferences: {
+          theme: 'light',
+          notifications: true,
+          publicProfile: true,
+          showTradingStats: true
+        }
+      };
+      
+      // Save new profile to database
+      await saveProfileToDatabase(walletAddress, profile);
+      console.log(`💾 New profile saved to database for ${walletAddress}`);
+    }
     
     res.json({ success: true, profile });
   } catch (error) {
@@ -2137,10 +2171,36 @@ app.post('/profile/:walletAddress/tokens', async (req, res) => {
 
     console.log(`📝 Adding token to profile: ${tokenName} (${tokenSymbol}) for ${walletAddress}`);
 
-    // Get existing profile
-    const profile = await getProfileFromDatabase(walletAddress);
+    // Get existing profile (with fallback to create new one)
+    let profile = await getProfileFromDatabase(walletAddress);
     if (!profile) {
-      return res.status(404).json({ success: false, error: 'Profile not found' });
+      // Create new profile if doesn't exist
+      profile = {
+        walletAddress: walletAddress.toLowerCase(),
+        username: `User_${walletAddress.slice(0, 6)}`,
+        bio: 'Welcome to OG Pump! 🚀',
+        avatarUrl: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tokensCreated: [],
+        tradingStats: {
+          totalTrades: 0,
+          totalVolume: 0,
+          tokensHeld: 0,
+          favoriteTokens: [],
+          lastTradeAt: null
+        },
+        preferences: {
+          theme: 'light',
+          notifications: true,
+          publicProfile: true,
+          showTradingStats: true
+        }
+      };
+      
+      // Save new profile to database
+      await saveProfileToDatabase(walletAddress, profile);
+      console.log(`💾 New profile created for tokens endpoint: ${walletAddress}`);
     }
 
     // Add token to created tokens list

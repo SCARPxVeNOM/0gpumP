@@ -72,12 +72,34 @@ export class NewBondingCurveTradingService {
       
       console.log(`🔍 Getting curve info for: ${curveAddress}`)
       
+      // First check if the contract is seeded
+      let seeded = false
+      try {
+        seeded = await curve.seeded()
+        console.log(`✅ Seeded status: ${seeded}`)
+      } catch (e) {
+        console.warn(`❌ Failed to get seeded status:`, e.message)
+        return null // If we can't even check if it's seeded, the contract is likely invalid
+      }
+      
+      if (!seeded) {
+        console.warn(`⚠️ Bonding curve not seeded yet: ${curveAddress}`)
+        return {
+          tokenAddress: null,
+          curveAddress,
+          ogReserve: '0',
+          tokenReserve: '0',
+          currentPrice: '0',
+          feeBps: 0,
+          seeded: false
+        }
+      }
+      
       // Get all curve data with individual error handling
       let tokenAddress = null
       let ogReserve = 0n
       let tokenReserve = 0n
       let feeBps = 0
-      let seeded = false
       
       try {
         tokenAddress = await curve.token()
@@ -105,13 +127,6 @@ export class NewBondingCurveTradingService {
         console.log(`✅ Fee BPS: ${feeBps}`)
       } catch (e) {
         console.warn(`❌ Failed to get fee BPS:`, e.message)
-      }
-      
-      try {
-        seeded = await curve.seeded()
-        console.log(`✅ Seeded: ${seeded}`)
-      } catch (e) {
-        console.warn(`❌ Failed to get seeded status:`, e.message)
       }
 
       // Calculate current price (OG per token)
