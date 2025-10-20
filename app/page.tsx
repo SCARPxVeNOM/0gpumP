@@ -299,6 +299,10 @@ export default function App() {
             <MessageCircle className="w-5 h-5" />
             <span>Ask PumpAI</span>
           </Link>
+          <Link href="/gaming" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
+            <Zap className="w-5 h-5" />
+            <span>Gaming</span>
+          </Link>
           <Link href="/profile" className="flex items-center gap-3 px-4 py-3 rounded-md nb-border nb-shadow-sm bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5">
             <User className="w-5 h-5" />
             <span>Profile</span>

@@ -1,0 +1,13 @@
+{
+  "type": "coinflip-leaderboard",
+  "data": [
+    {
+      "userAddress": "0x2dc274abc0df37647ced9212e751524708a68996",
+      "wins": 1,
+      "losses": 0,
+      "plays": 1
+    }
+  ],
+  "timestamp": 1760958710194,
+  "snapshotDate": "2025-10-20T11:11:50.194Z"
+}

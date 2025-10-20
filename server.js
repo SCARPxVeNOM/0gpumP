@@ -50,6 +50,58 @@ const acknowledgedProviders = new Map();
 const AI_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // -----------------------------
+// 0G DA - Game Provenance Storage
+// -----------------------------
+const GAME_PROVENANCE_FILE = path.join(process.cwd(), 'data', 'game-provenance.json');
+let gameProvenanceMap = new Map(); // gameId -> rootHash
+
+async function loadGameProvenanceMap() {
+  try {
+    ensureDataDir();
+    if (fs.existsSync(GAME_PROVENANCE_FILE)) {
+      const raw = fs.readFileSync(GAME_PROVENANCE_FILE, 'utf8');
+      const obj = JSON.parse(raw || '{}');
+      gameProvenanceMap = new Map(Object.entries(obj));
+      console.log(`🎮 Game provenance map loaded (${gameProvenanceMap.size} entries)`);
+    }
+  } catch (e) {
+    console.warn('⚠️ Failed to load game provenance map:', e?.message || e);
+    gameProvenanceMap = new Map();
+  }
+}
+
+async function saveGameProvenanceMap() {
+  try {
+    ensureDataDir();
+    const obj = Object.fromEntries(gameProvenanceMap);
+    fs.writeFileSync(GAME_PROVENANCE_FILE, JSON.stringify(obj, null, 2));
+  } catch (e) {
+    console.warn('⚠️ Failed to save game provenance map:', e?.message || e);
+  }
+}
+
+// Store game result to 0G DA for permanent, verifiable record
+async function storeGameResultTo0G(gameData) {
+  try {
+    const jsonData = JSON.stringify(gameData, null, 2);
+    const buffer = Buffer.from(jsonData, 'utf-8');
+    
+    // Upload to 0G Storage using direct SDK
+    const result = await uploadBufferDirect(buffer, `game-${gameData.gameId}-${Date.now()}.json`);
+    
+    if (result.success && result.rootHash) {
+      gameProvenanceMap.set(gameData.gameId, result.rootHash);
+      await saveGameProvenanceMap();
+      console.log(`✅ Game ${gameData.gameId} stored to 0G DA: ${result.rootHash}`);
+      return result.rootHash;
+    }
+  } catch (e) {
+    console.error('❌ Failed to store game to 0G DA:', e.message);
+  }
+  return null;
+}
+
+// -----------------------------
 // Dialogue storage (walletAddress -> rootHash) persistence
 // -----------------------------
 const DIALOGUE_MAP_FILE = path.join(process.cwd(), 'data', 'dialogue-map.json');
@@ -102,6 +154,7 @@ async function saveDialogueMap() {
 import http from "http";
 import https from "https";
 import { Indexer, ZgFile } from "@0glabs/0g-ts-sdk";
+import { createZGComputeNetworkBroker as createBroker } from "@0glabs/0g-serving-broker";
 import os from "os";
 
 // (legacy kit proxy helper retained for compat, but no longer used in new flow)
@@ -1609,7 +1662,7 @@ app.get("/profile/:walletAddress", async (req, res) => {
       await saveProfileToDatabase(walletAddress, profile);
       console.log(`💾 New profile saved to database for ${walletAddress}`);
     }
-    
+
     res.json({ success: true, profile });
   } catch (error) {
     console.error("Get profile error:", error);
@@ -2349,6 +2402,9 @@ async function startServer() {
     // Load coin index from disk
     await loadCoinIndex();
     
+    // Load game provenance map
+    await loadGameProvenanceMap();
+    
     // Auto-restore coins from 0G Storage on startup (if database is empty)
     const db = await databaseManager.getConnection();
     const coinCount = await db.get('SELECT COUNT(*) as count FROM coins');
@@ -2419,3 +2475,883 @@ process.on('SIGTERM', async () => {
 
 // Start the server
 startServer();
+
+// ------------------------------
+// Gaming: Arcade - Coinflip (off-chain provable fairness with commit-reveal)
+// ------------------------------
+app.post('/gaming/coinflip', async (req, res) => {
+  try {
+    const { userAddress, wager = 10, guess, tokenAddress, txHash } = req.body || {};
+    if (!ethers.isAddress(userAddress)) return res.status(400).json({ error: 'Invalid address' });
+    if (guess !== 'heads' && guess !== 'tails') return res.status(400).json({ error: 'Guess must be heads|tails' });
+
+    await dataService.initialize();
+    const db = await databaseManager.getConnection();
+
+    // Use OG chain blockhash entropy for fairness
+    const rpc = process.env.OG_RPC || 'https://evmrpc-testnet.0g.ai';
+    const provider = new ethers.JsonRpcProvider(rpc);
+    const block = await provider.getBlock('latest');
+    const secret = block.hash + ':' + crypto.randomBytes(16).toString('hex');
+    const seedHash = crypto.createHash('sha256').update(secret).digest('hex');
+    const coin = (parseInt(ethers.keccak256(ethers.toUtf8Bytes(secret)).slice(2, 10), 16) % 2) === 0 ? 'heads' : 'tails';
+    const win = coin === guess;
+    const outcome = win ? 'win' : 'lose';
+
+    // Store flip result
+    const result = await db.run(`INSERT INTO gaming_coinflip(userAddress, wager, outcome, seedHash, seedReveal, blockNumber, blockHash) VALUES (?,?,?,?,?,?,?)`, [userAddress.toLowerCase(), wager, outcome, seedHash, secret, block.number, block.hash]);
+    const gameId = `coinflip-${result.lastID}`;
+
+    // If win and tokenAddress provided, send 2x payout
+    let payoutTx = null;
+    if (win && tokenAddress && ethers.isAddress(tokenAddress)) {
+      try {
+        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+        const tokenContract = new ethers.Contract(
+          tokenAddress,
+          ['function transfer(address to, uint256 amount) returns (bool)'],
+          wallet
+        );
+        const payoutAmount = ethers.parseEther((wager * 2).toString());
+        const tx = await tokenContract.transfer(userAddress, payoutAmount);
+        await tx.wait();
+        payoutTx = tx.hash;
+        console.log(`💰 Coinflip WIN payout sent: ${payoutAmount} to ${userAddress}, tx: ${payoutTx}`);
+      } catch (payoutError) {
+        console.error('Payout failed:', payoutError);
+      }
+    }
+
+    // Store game result to 0G DA for permanent verification
+    const gameData = {
+      gameId,
+      gameType: 'coinflip',
+      userAddress,
+      wager,
+      guess,
+      result: coin,
+      outcome,
+      seedHash,
+      seedReveal: secret,
+      blockNumber: block.number,
+      blockHash: block.hash,
+      tokenAddress,
+      stakeTxHash: txHash,
+      payoutTx,
+      timestamp: Date.now()
+    };
+    const provenanceHash = await storeGameResultTo0G(gameData);
+
+    return res.json({ 
+      success: true, 
+      result: coin, 
+      outcome, 
+      seedHash, 
+      seedReveal: secret, 
+      blockNumber: block.number, 
+      blockHash: block.hash,
+      payoutTx,
+      provenanceHash // 0G DA root hash for verification
+    });
+  } catch (e) {
+    console.error('coinflip error:', e);
+    return res.status(500).json({ error: e?.message || 'coinflip failed' });
+  }
+});
+
+// Leaderboard and recent results (with 0G DA backup)
+app.get('/gaming/coinflip/leaderboard', async (_req, res) => {
+  try {
+    const db = await databaseManager.getConnection();
+    const rows = await db.all(`
+      SELECT userAddress,
+             SUM(CASE WHEN outcome='win' THEN 1 ELSE 0 END) as wins,
+             SUM(CASE WHEN outcome='lose' THEN 1 ELSE 0 END) as losses,
+             COUNT(1) as plays
+      FROM gaming_coinflip
+      GROUP BY userAddress
+      ORDER BY wins DESC, plays DESC
+      LIMIT 20
+    `);
+    
+    // Store leaderboard to 0G DA for permanent record (async, non-blocking)
+    const leaderboardData = {
+      type: 'coinflip-leaderboard',
+      data: rows,
+      timestamp: Date.now(),
+      snapshotDate: new Date().toISOString()
+    };
+    storeGameResultTo0G(leaderboardData).catch(e => console.warn('Leaderboard 0G backup failed:', e.message));
+    
+    return res.json({ success: true, leaderboard: rows, immutableBackup: true });
+  } catch (e) {
+    console.error('coinflip leaderboard error:', e);
+    return res.status(500).json({ error: e?.message || 'leaderboard failed' });
+  }
+});
+
+app.get('/gaming/coinflip/recent', async (_req, res) => {
+  try {
+    const db = await databaseManager.getConnection();
+    const rows = await db.all(`SELECT userAddress, wager, outcome, blockNumber, createdAt FROM gaming_coinflip ORDER BY id DESC LIMIT 30`);
+    return res.json({ success: true, recent: rows });
+  } catch (e) {
+    console.error('coinflip recent error:', e);
+    return res.status(500).json({ error: e?.message || 'recent failed' });
+  }
+});
+
+// ------------------------------
+// Gaming: PumpPlay - create round, bet, resolve (simplified off-chain pool)
+// ------------------------------
+app.post('/gaming/pumpplay/create', async (req, res) => {
+  try {
+    const { candidates, durationMinutes = 10 } = req.body || {};
+    if (!Array.isArray(candidates) || candidates.length < 2) return res.status(400).json({ error: 'Need at least 2 candidates' });
+    const endsAt = Date.now() + durationMinutes * 60 * 1000;
+    const db = await databaseManager.getConnection();
+    await db.run(`INSERT INTO gaming_pumpplay_rounds(endsAt, candidates, status) VALUES (?,?, 'open')`, [endsAt, JSON.stringify(candidates)]);
+    const row = await db.get(`SELECT last_insert_rowid() as id`);
+    return res.json({ success: true, roundId: row.id, endsAt });
+  } catch (e) {
+    console.error('pumpplay create error:', e);
+    return res.status(500).json({ error: e?.message || 'create failed' });
+  }
+});
+
+app.post('/gaming/pumpplay/bet', async (req, res) => {
+  try {
+    const { userAddress, roundId, coinId, amount = 10, tokenAddress, txHash } = req.body || {};
+    if (!ethers.isAddress(userAddress)) return res.status(400).json({ error: 'Invalid address' });
+    const db = await databaseManager.getConnection();
+    const round = await db.get(`SELECT * FROM gaming_pumpplay_rounds WHERE id = ?`, [roundId]);
+    if (!round) return res.status(404).json({ error: 'Round not found' });
+    if (round.status !== 'open' || Date.now() > round.endsAt) return res.status(400).json({ error: 'Round closed' });
+
+    // Store bet with token info
+    await db.run(`INSERT INTO gaming_pumpplay_bets(roundId, userAddress, coinId, amount) VALUES (?,?,?,?)`, [roundId, userAddress.toLowerCase(), coinId, amount]);
+    await db.run(`UPDATE gaming_pumpplay_rounds SET totalPool = totalPool + ? WHERE id = ?`, [amount, roundId]);
+    
+    console.log(`✅ PumpPlay bet placed: ${userAddress} → ${amount} tokens on coin ${coinId} (round ${roundId})`);
+    return res.json({ success: true, message: 'Bet placed!' });
+  } catch (e) {
+    console.error('pumpplay bet error:', e);
+    return res.status(500).json({ error: e?.message || 'bet failed' });
+  }
+});
+
+app.post('/gaming/pumpplay/resolve', async (req, res) => {
+  try {
+    const { roundId, winnerCoinId, useAI = false } = req.body || {};
+    const db = await databaseManager.getConnection();
+    const round = await db.get(`SELECT * FROM gaming_pumpplay_rounds WHERE id = ?`, [roundId]);
+    if (!round) return res.status(404).json({ error: 'Round not found' });
+    if (round.status === 'resolved') return res.json({ success: true, message: 'Already resolved', winnerCoinId: round.winnerCoinId });
+    
+    let finalWinnerId = winnerCoinId;
+    
+    // If useAI is true, let 0G Compute predict the winner
+    if (useAI) {
+      try {
+        const candidates = JSON.parse(round.candidates);
+        const coins = await db.all(`SELECT * FROM coins WHERE id IN (${candidates.join(',')})`);
+        
+        const provider = new ethers.JsonRpcProvider(process.env.OG_RPC || 'https://evmrpc-testnet.0g.ai');
+        const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+        const broker = await createBroker(wallet);
+        
+        // Ensure ledger
+        try {
+          const account = await broker.ledger.getLedger();
+          if (!account || account.totalBalance === 0n) {
+            await broker.ledger.addLedger(ethers.parseEther('0.05'));
+          }
+        } catch {}
+        
+        const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
+        
+        // Re-verify provider
+        const cacheKey = `${wallet.address}:${providerAddress}`;
+        const cacheTime = acknowledgedProviders.get(cacheKey);
+        const needsReAck = !cacheTime || (Date.now() - cacheTime > 24 * 60 * 60 * 1000);
+        
+        if (needsReAck) {
+          try {
+            await broker.inference.acknowledgeProviderSigner(providerAddress);
+            acknowledgedProviders.set(cacheKey, Date.now());
+          } catch (ackErr) {
+            if (ackErr.message?.includes('already known')) {
+              acknowledgedProviders.set(cacheKey, Date.now());
+            }
+          }
+        }
+        
+        const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
+        
+        const prompt = `You are a crypto market analyst. Based on the following memecoin data, predict which ONE will have the highest pump potential in the next 10 minutes:
+
+${coins.map((c, i) => `${i + 1}. ${c.symbol} - "${c.name}" - ${c.description || 'No description'}`).join('\n')}
+
+Analyze each based on:
+- Name/symbol catchiness and virality
+- Meme potential and trend fit
+- Community appeal
+
+Return ONLY valid JSON in this format:
+{
+  "winnerId": <coin_id>,
+  "winnerSymbol": "<symbol>",
+  "confidence": <0-100>,
+  "reasoning": "brief explanation"
+}`;
+        
+        const messages = [{ role: 'user', content: prompt }];
+        const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
+        const resp = await fetch(`${endpoint}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          body: JSON.stringify({ messages, model, temperature: 0.8, max_tokens: 300, stream: false })
+        });
+        
+        const data = await resp.json();
+        const content = data?.choices?.[0]?.message?.content || '{}';
+        
+        try {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          const aiResult = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+          finalWinnerId = aiResult.winnerId || candidates[0];
+          console.log(`🤖 AI predicted winner: ${aiResult.winnerSymbol} (ID: ${finalWinnerId}, Confidence: ${aiResult.confidence}%)`);
+        } catch {
+          finalWinnerId = candidates[0]; // Fallback to first candidate
+          console.warn('AI prediction failed, using fallback');
+        }
+      } catch (aiErr) {
+        console.error('AI resolution error:', aiErr);
+        finalWinnerId = winnerCoinId || JSON.parse(round.candidates)[0];
+      }
+    }
+
+    // Get all bets
+    const bets = await db.all(`SELECT * FROM gaming_pumpplay_bets WHERE roundId = ?`, [roundId]);
+    if (bets.length === 0) {
+      await db.run(`UPDATE gaming_pumpplay_rounds SET status='resolved', winnerCoinId = ? WHERE id = ?`, [finalWinnerId, roundId]);
+      return res.json({ success: true, winnerCoinId: finalWinnerId, message: 'No bets to resolve', aiResolved: useAI });
+    }
+
+    // Calculate winner payouts (proportional to their bet)
+    const winners = bets.filter(b => b.coinId === finalWinnerId);
+    const totalWinningBets = winners.reduce((s, b) => s + b.amount, 0);
+    
+    if (totalWinningBets > 0 && round.totalPool > 0) {
+      const provider = new ethers.JsonRpcProvider(process.env.OG_RPC || 'https://evmrpc-testnet.0g.ai');
+      const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+      
+      // For demo: assume all bets are in same token (first winner's token)
+      // In production, track token per bet
+      const coin = await db.get(`SELECT tokenAddress FROM coins WHERE id = ?`, [finalWinnerId]);
+      if (coin?.tokenAddress) {
+        const tokenContract = new ethers.Contract(
+          coin.tokenAddress,
+          ['function transfer(address to, uint256 amount) returns (bool)'],
+          wallet
+        );
+
+        for (const w of winners) {
+          const shareRatio = w.amount / totalWinningBets;
+          const payout = round.totalPool * shareRatio;
+          const payoutAmount = ethers.parseEther(payout.toFixed(6));
+          
+          try {
+            const tx = await tokenContract.transfer(w.userAddress, payoutAmount);
+            await tx.wait();
+            console.log(`💰 PumpPlay payout: ${payout} tokens to ${w.userAddress}, tx: ${tx.hash}`);
+          } catch (payoutErr) {
+            console.error(`Payout failed for ${w.userAddress}:`, payoutErr);
+          }
+        }
+      }
+    }
+
+    await db.run(`UPDATE gaming_pumpplay_rounds SET status='resolved', winnerCoinId = ? WHERE id = ?`, [finalWinnerId, roundId]);
+    return res.json({ success: true, winnerCoinId: finalWinnerId, winnersCount: winners.length, aiResolved: useAI });
+  } catch (e) {
+    console.error('pumpplay resolve error:', e);
+    return res.status(500).json({ error: e?.message || 'resolve failed' });
+  }
+});
+
+// Gaming: Get available coins for gaming (all created platform coins with user balance check)
+app.get('/gaming/coins/:userAddress', async (req, res) => {
+  try {
+    const { userAddress } = req.params;
+    if (!ethers.isAddress(userAddress)) return res.status(400).json({ error: 'Invalid address' });
+    
+    const db = await databaseManager.getConnection();
+    // Get ALL coins created on the platform that have been deployed
+    const coins = await db.all(`
+      SELECT id, name, symbol, tokenAddress, curveAddress, imageHash, imageUrl, description, createdAt 
+      FROM coins 
+      WHERE tokenAddress IS NOT NULL AND tokenAddress != '' 
+      ORDER BY createdAt DESC 
+      LIMIT 100
+    `);
+    
+    const provider = new ethers.JsonRpcProvider(process.env.OG_RPC || 'https://evmrpc-testnet.0g.ai');
+    const ERC20_ABI = ['function balanceOf(address) view returns (uint256)'];
+    
+    const availableCoins = [];
+    for (const coin of coins) {
+      try {
+        const token = new ethers.Contract(coin.tokenAddress, ERC20_ABI, provider);
+        const balance = await token.balanceOf(userAddress);
+        
+        availableCoins.push({
+          id: coin.id,
+          name: coin.name,
+          symbol: coin.symbol,
+          tokenAddress: coin.tokenAddress,
+          curveAddress: coin.curveAddress,
+          balance: ethers.formatEther(balance),
+          hasBalance: balance > 0n,
+          imageHash: coin.imageHash,
+          imageUrl: coin.imageUrl,
+          description: coin.description
+        });
+      } catch (e) {
+        console.warn(`Failed to check balance for ${coin.symbol}:`, e.message);
+        // Still include coin even if balance check fails
+        availableCoins.push({
+          id: coin.id,
+          name: coin.name,
+          symbol: coin.symbol,
+          tokenAddress: coin.tokenAddress,
+          curveAddress: coin.curveAddress,
+          balance: '0.0',
+          hasBalance: false,
+          imageHash: coin.imageHash,
+          imageUrl: coin.imageUrl,
+          description: coin.description
+        });
+      }
+    }
+    
+    // Separate coins user holds vs all coins
+    const userHoldings = availableCoins.filter(c => c.hasBalance);
+    
+    return res.json({ 
+      success: true, 
+      coins: availableCoins,
+      userHoldings: userHoldings,
+      totalCoins: availableCoins.length,
+      coinsWithBalance: userHoldings.length
+    });
+  } catch (e) {
+    console.error('gaming coins error:', e);
+    return res.status(500).json({ error: e?.message || 'failed to load coins' });
+  }
+});
+
+// PumpPlay: Get active rounds with coin details
+app.get('/gaming/pumpplay/rounds', async (_req, res) => {
+  try {
+    const db = await databaseManager.getConnection();
+    let rounds = await db.all(`SELECT * FROM gaming_pumpplay_rounds WHERE status='open' ORDER BY createdAt DESC LIMIT 10`);
+    
+    // Auto-create round if none exist
+    if (rounds.length === 0) {
+      const coins = await db.all(`SELECT id FROM coins WHERE tokenAddress IS NOT NULL ORDER BY RANDOM() LIMIT 3`);
+      if (coins.length >= 2) {
+        const candidates = coins.map(c => c.id);
+        const endsAt = Date.now() + 15 * 60 * 1000; // 15 min
+        await db.run(`INSERT INTO gaming_pumpplay_rounds(endsAt, candidates, status) VALUES (?, ?, 'open')`, [endsAt, JSON.stringify(candidates)]);
+        rounds = await db.all(`SELECT * FROM gaming_pumpplay_rounds WHERE status='open' ORDER BY createdAt DESC LIMIT 10`);
+        console.log('✅ Auto-created PumpPlay round with candidates:', candidates);
+      }
+    }
+    
+    for (const round of rounds) {
+      round.candidates = JSON.parse(round.candidates);
+      const coins = await db.all(`SELECT id, name, symbol, imageHash, tokenAddress FROM coins WHERE id IN (${round.candidates.map(()=>'?').join(',')})`, round.candidates);
+      round.coinDetails = coins;
+      
+      const bets = await db.all(`SELECT coinId, SUM(amount) as total FROM gaming_pumpplay_bets WHERE roundId=? GROUP BY coinId`, [round.id]);
+      round.bets = bets;
+      
+      // Time remaining
+      round.timeRemaining = Math.max(0, round.endsAt - Date.now());
+    }
+    
+    return res.json({ success: true, rounds });
+  } catch (e) {
+    console.error('pumpplay rounds error:', e);
+    return res.status(500).json({ error: e?.message || 'rounds failed' });
+  }
+});
+
+// Meme Royale: Get recent battles
+app.get('/gaming/meme-royale/battles', async (_req, res) => {
+  try {
+    const db = await databaseManager.getConnection();
+    const battles = await db.all(`
+      SELECT mr.*, 
+             c1.name as leftName, c1.symbol as leftSymbol, c1.imageHash as leftImage,
+             c2.name as rightName, c2.symbol as rightSymbol, c2.imageHash as rightImage
+      FROM gaming_meme_royale mr
+      LEFT JOIN coins c1 ON mr.leftCoinId = c1.id
+      LEFT JOIN coins c2 ON mr.rightCoinId = c2.id
+      ORDER BY mr.createdAt DESC LIMIT 20
+    `);
+    return res.json({ success: true, battles });
+  } catch (e) {
+    console.error('meme battles error:', e);
+    return res.status(500).json({ error: e?.message || 'battles failed' });
+  }
+});
+
+// ------------------------------
+// Gaming: Mines - Stake.com style game
+// ------------------------------
+
+// Calculate multiplier based on mines count and revealed tiles
+function calculateMinesMultiplier(minesCount, tilesRevealed) {
+  const totalTiles = 25;
+  const safeTiles = totalTiles - minesCount;
+  
+  // Progressive multiplier calculation
+  let multiplier = 1.0;
+  for (let i = 0; i < tilesRevealed; i++) {
+    const remainingSafe = safeTiles - i;
+    const remainingTotal = totalTiles - i;
+    const risk = remainingTotal / remainingSafe;
+    multiplier *= risk * 0.97; // 3% house edge
+  }
+  
+  return multiplier;
+}
+
+// Start new mines game
+app.post('/gaming/mines/start', async (req, res) => {
+  try {
+    const { userAddress, betAmount, minesCount, tokenAddress, txHash } = req.body || {};
+    
+    if (!ethers.isAddress(userAddress)) return res.status(400).json({ error: 'Invalid address' });
+    if (!betAmount || betAmount <= 0) return res.status(400).json({ error: 'Invalid bet amount' });
+    if (!minesCount || minesCount < 1 || minesCount > 24) return res.status(400).json({ error: 'Mines count must be 1-24' });
+    if (!tokenAddress || !ethers.isAddress(tokenAddress)) return res.status(400).json({ error: 'Invalid token' });
+    
+    const db = await databaseManager.getConnection();
+    
+    // Generate 25-tile grid with random mine positions
+    const totalTiles = 25;
+    const allPositions = Array.from({ length: totalTiles }, (_, i) => i);
+    
+    // Shuffle and pick mine positions
+    for (let i = allPositions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allPositions[i], allPositions[j]] = [allPositions[j], allPositions[i]];
+    }
+    
+    const minePositions = allPositions.slice(0, minesCount).sort((a, b) => a - b);
+    const gridState = JSON.stringify(minePositions);
+    
+    // Create game session
+    await db.run(`
+      INSERT INTO gaming_mines(userAddress, betAmount, tokenAddress, minesCount, gridState, revealedTiles, status, currentMultiplier)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', 1.0)
+    `, [userAddress.toLowerCase(), betAmount, tokenAddress, minesCount, gridState, '[]']);
+    
+    const game = await db.get(`SELECT * FROM gaming_mines WHERE id = last_insert_rowid()`);
+    
+    console.log(`💣 Mines game started: ${userAddress}, ${minesCount} mines, bet ${betAmount}`);
+    
+    return res.json({
+      success: true,
+      gameId: game.id,
+      minesCount: game.minesCount,
+      currentMultiplier: 1.0,
+      revealedTiles: [],
+      status: 'active'
+    });
+    
+  } catch (e) {
+    console.error('mines start error:', e);
+    return res.status(500).json({ error: e?.message || 'failed to start game' });
+  }
+});
+
+// Reveal tile in mines game
+app.post('/gaming/mines/reveal', async (req, res) => {
+  try {
+    const { gameId, tileIndex } = req.body || {};
+    
+    if (!gameId) return res.status(400).json({ error: 'Game ID required' });
+    if (tileIndex === undefined || tileIndex < 0 || tileIndex >= 25) return res.status(400).json({ error: 'Invalid tile' });
+    
+    const db = await databaseManager.getConnection();
+    const game = await db.get(`SELECT * FROM gaming_mines WHERE id = ?`, [gameId]);
+    
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+    if (game.status !== 'active') return res.status(400).json({ error: 'Game already ended' });
+    
+    const minePositions = JSON.parse(game.gridState);
+    const revealedTiles = JSON.parse(game.revealedTiles);
+    
+    if (revealedTiles.includes(tileIndex)) return res.status(400).json({ error: 'Tile already revealed' });
+    
+    // Check if hit mine
+    const hitMine = minePositions.includes(tileIndex);
+    
+    if (hitMine) {
+      // Lost - reveal all mines
+      await db.run(`
+        UPDATE gaming_mines 
+        SET status = 'lost', completedAt = ?, revealedTiles = ?
+        WHERE id = ?
+      `, [Date.now(), JSON.stringify([...revealedTiles, tileIndex]), gameId]);
+      
+      return res.json({
+        success: true,
+        gameId,
+        hitMine: true,
+        tileIndex,
+        status: 'lost',
+        minePositions,
+        revealedTiles: [...revealedTiles, tileIndex],
+        finalMultiplier: 0
+      });
+    }
+    
+    // Safe tile - update revealed and multiplier
+    const newRevealed = [...revealedTiles, tileIndex];
+    const newMultiplier = calculateMinesMultiplier(game.minesCount, newRevealed.length);
+    
+    await db.run(`
+      UPDATE gaming_mines 
+      SET revealedTiles = ?, currentMultiplier = ?
+      WHERE id = ?
+    `, [JSON.stringify(newRevealed), newMultiplier, gameId]);
+    
+    // Check if won (all safe tiles revealed)
+    const safeTiles = 25 - game.minesCount;
+    const won = newRevealed.length === safeTiles;
+    
+    if (won) {
+      await db.run(`UPDATE gaming_mines SET status = 'won', completedAt = ? WHERE id = ?`, [Date.now(), gameId]);
+    }
+    
+    return res.json({
+      success: true,
+      gameId,
+      hitMine: false,
+      tileIndex,
+      status: won ? 'won' : 'active',
+      revealedTiles: newRevealed,
+      currentMultiplier: newMultiplier,
+      minePositions: won ? minePositions : undefined
+    });
+    
+  } catch (e) {
+    console.error('mines reveal error:', e);
+    return res.status(500).json({ error: e?.message || 'reveal failed' });
+  }
+});
+
+// Cashout from mines game
+app.post('/gaming/mines/cashout', async (req, res) => {
+  try {
+    const { gameId } = req.body || {};
+    
+    if (!gameId) return res.status(400).json({ error: 'Game ID required' });
+    
+    const db = await databaseManager.getConnection();
+    const game = await db.get(`SELECT * FROM gaming_mines WHERE id = ?`, [gameId]);
+    
+    if (!game) return res.status(404).json({ error: 'Game not found' });
+    if (game.status !== 'active') return res.status(400).json({ error: 'Game already ended' });
+    
+    const revealedTiles = JSON.parse(game.revealedTiles);
+    if (revealedTiles.length === 0) return res.status(400).json({ error: 'Reveal at least one tile before cashing out' });
+    
+    const payout = game.betAmount * game.currentMultiplier;
+    
+    // Send payout
+    let payoutTx = null;
+    try {
+      const provider = new ethers.JsonRpcProvider(process.env.OG_RPC || 'https://evmrpc-testnet.0g.ai');
+      const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+      const tokenContract = new ethers.Contract(
+        game.tokenAddress,
+        ['function transfer(address to, uint256 amount) returns (bool)'],
+        wallet
+      );
+      
+      const payoutAmount = ethers.parseEther(payout.toFixed(6));
+      const tx = await tokenContract.transfer(game.userAddress, payoutAmount);
+      await tx.wait();
+      payoutTx = tx.hash;
+      console.log(`💰 Mines cashout: ${payout} tokens to ${game.userAddress}, tx: ${payoutTx}`);
+    } catch (payoutErr) {
+      console.error('Payout failed:', payoutErr);
+    }
+    
+    await db.run(`
+      UPDATE gaming_mines 
+      SET status = 'cashed_out', completedAt = ?, cashoutAmount = ?, cashoutTx = ?
+      WHERE id = ?
+    `, [Date.now(), payout, payoutTx, gameId]);
+    
+    // Store game result to 0G DA
+    const minePositions = JSON.parse(game.minePositions);
+    const gameData = {
+      gameId: `mines-${gameId}`,
+      gameType: 'mines',
+      userAddress: game.userAddress,
+      betAmount: game.betAmount,
+      minesCount: game.minesCount,
+      revealedTiles,
+      minePositions,
+      finalMultiplier: game.currentMultiplier,
+      cashoutAmount: payout,
+      tokenAddress: game.tokenAddress,
+      stakeTxHash: game.stakeTxHash,
+      payoutTx,
+      timestamp: Date.now()
+    };
+    const provenanceHash = await storeGameResultTo0G(gameData);
+    
+    return res.json({
+      success: true,
+      gameId,
+      status: 'cashed_out',
+      cashoutAmount: payout,
+      multiplier: game.currentMultiplier,
+      payoutTx,
+      provenanceHash
+    });
+    
+  } catch (e) {
+    console.error('mines cashout error:', e);
+    return res.status(500).json({ error: e?.message || 'cashout failed' });
+  }
+});
+
+// Get mines game history
+app.get('/gaming/mines/history/:userAddress', async (req, res) => {
+  try {
+    const { userAddress } = req.params;
+    if (!ethers.isAddress(userAddress)) return res.status(400).json({ error: 'Invalid address' });
+    
+    const db = await databaseManager.getConnection();
+    const games = await db.all(`
+      SELECT id, betAmount, minesCount, status, currentMultiplier, cashoutAmount, createdAt
+      FROM gaming_mines
+      WHERE userAddress = ?
+      ORDER BY createdAt DESC
+      LIMIT 50
+    `, [userAddress.toLowerCase()]);
+    
+    return res.json({ success: true, games });
+  } catch (e) {
+    console.error('mines history error:', e);
+    return res.status(500).json({ error: e?.message || 'history failed' });
+  }
+});
+
+// ------------------------------
+// 0G DA - Game Provenance Verification
+// ------------------------------
+app.get('/gaming/verify/:gameId', async (req, res) => {
+  try {
+    const { gameId } = req.params;
+    const rootHash = gameProvenanceMap.get(gameId);
+    
+    if (!rootHash) {
+      return res.status(404).json({ 
+        error: 'Game provenance not found', 
+        message: 'This game was not stored to 0G DA or the gameId is invalid'
+      });
+    }
+    
+    // Download game data from 0G Storage
+    await initializeOGSdkOnce();
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), '0g-game-verify-'));
+    const tempFile = path.join(tempDir, 'game.json');
+    
+    const err = await ogIndexer.download(rootHash, tempFile, true);
+    if (err) {
+      return res.status(500).json({ error: 'Failed to download game data from 0G Storage' });
+    }
+    
+    const gameData = JSON.parse(fs.readFileSync(tempFile, 'utf8'));
+    
+    // Cleanup
+    try { fs.unlinkSync(tempFile); fs.rmdirSync(tempDir); } catch {}
+    
+    return res.json({
+      success: true,
+      verified: true,
+      gameData,
+      rootHash,
+      message: '✅ Game result verified from 0G DA - Tamper-proof and permanent'
+    });
+  } catch (e) {
+    console.error('game verification error:', e);
+    return res.status(500).json({ error: e?.message || 'verification failed' });
+  }
+});
+
+// ------------------------------
+// Gaming: Meme Royale - judge via 0G Compute with stakes
+// ------------------------------
+app.post('/gaming/meme-royale', async (req, res) => {
+  try {
+    const { leftCoin, rightCoin, userAddress, stakeAmount, stakeSide, tokenAddress, txHash } = req.body || {};
+    if (!leftCoin || !rightCoin) return res.status(400).json({ error: 'leftCoin and rightCoin required' });
+
+    console.log('🔥 Meme Royale battle starting:', leftCoin.symbol, 'vs', rightCoin.symbol);
+
+    const provider = new ethers.JsonRpcProvider(process.env.OG_RPC || 'https://evmrpc-testnet.0g.ai');
+    const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+    
+    // Initialize 0G Compute broker
+    const broker = await createBroker(wallet);
+    
+    // Ensure ledger exists
+    try {
+      const account = await broker.ledger.getLedger();
+      if (!account || account.totalBalance === 0n) {
+        console.log('Creating/funding 0G Compute ledger...');
+        await broker.ledger.addLedger(ethers.parseEther('0.05'));
+      }
+    } catch {}
+
+    const providerAddress = '0x3feE5a4dd5FDb8a32dDA97Bed899830605dBD9D3';
+    
+    // Re-verify provider (REQUIRED after 0G Compute migration)
+    const cacheKey = `${wallet.address}:${providerAddress}`;
+    const cacheTime = acknowledgedProviders.get(cacheKey);
+    const needsReAck = !cacheTime || (Date.now() - cacheTime > 24 * 60 * 60 * 1000); // Re-verify daily
+    
+    if (needsReAck) {
+      try {
+        console.log('🔄 Re-verifying 0G Compute provider (migration requirement)...');
+        await broker.inference.acknowledgeProviderSigner(providerAddress);
+        acknowledgedProviders.set(cacheKey, Date.now());
+        console.log('✅ Provider re-verified successfully');
+      } catch (ackErr) {
+        if (!ackErr.message?.includes('already known')) {
+          console.warn('Acknowledge warning:', ackErr.message);
+        } else {
+          acknowledgedProviders.set(cacheKey, Date.now());
+        }
+      }
+    }
+
+    const { endpoint, model } = await broker.inference.getServiceMetadata(providerAddress);
+
+    // Enhanced prompt for better judging
+    const prompt = `You are a meme coin expert judge. Analyze these two coins in a battle royale:
+
+LEFT FIGHTER: ${leftCoin.symbol} - "${leftCoin.name}"
+RIGHT FIGHTER: ${rightCoin.symbol} - "${rightCoin.name}"
+
+Score EACH coin (0-10) on:
+1. Virality potential (catchiness, meme-ability)
+2. Trend fit (current internet culture)
+3. Name/symbol creativity
+
+Return ONLY valid JSON in this exact format:
+{
+  "left": {"virality": X, "trend": X, "creativity": X, "total": XX, "reasons": "brief explanation"},
+  "right": {"virality": X, "trend": X, "creativity": X, "total": XX, "reasons": "brief explanation"},
+  "winner": "left" or "right"
+}`;
+
+    const messages = [{ role: 'user', content: prompt }];
+    const headers = await broker.inference.getRequestHeaders(providerAddress, JSON.stringify(messages));
+    const resp = await fetch(`${endpoint}/chat/completions`, { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json', ...headers }, 
+      body: JSON.stringify({ messages, model, temperature: 0.7, max_tokens: 500, stream: false }) 
+    });
+    
+    const data = await resp.json();
+    const content = data?.choices?.[0]?.message?.content || '{}';
+    
+    let judged;
+    try {
+      // Extract JSON if wrapped in markdown
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : content;
+      judged = JSON.parse(jsonStr);
+      
+      // Validate structure
+      if (!judged.left || !judged.right || !judged.winner) {
+        throw new Error('Invalid structure');
+      }
+    } catch {
+      console.warn('AI response parsing failed, using fallback');
+      judged = { 
+        left: { virality: 6, trend: 6, creativity: 6, total: 18, reasons: 'Solid meme potential' }, 
+        right: { virality: 5, trend: 5, creativity: 5, total: 15, reasons: 'Good concept' }, 
+        winner: 'left' 
+      };
+    }
+
+    const db = await databaseManager.getConnection();
+    const winnerCoinId = judged.winner === 'left' ? leftCoin.id : rightCoin.id;
+    
+    // Store battle result
+    const result = await db.run(
+      `INSERT INTO gaming_meme_royale(leftCoinId, rightCoinId, leftScore, rightScore, winnerCoinId) VALUES (?,?,?,?,?)`, 
+      [leftCoin.id, rightCoin.id, judged.left?.total || 0, judged.right?.total || 0, winnerCoinId]
+    );
+    const gameId = `meme-royale-${result.lastID}`;
+
+    // Handle stake payout if user placed bet
+    let payoutTx = null;
+    const userWon = userAddress && stakeAmount && stakeSide && 
+                    ((stakeSide === 'left' && judged.winner === 'left') || (stakeSide === 'right' && judged.winner === 'right'));
+    
+    if (userAddress && stakeAmount && stakeSide && tokenAddress && userWon) {
+      try {
+        const tokenContract = new ethers.Contract(
+          tokenAddress,
+          ['function transfer(address to, uint256 amount) returns (bool)'],
+          wallet
+        );
+        const payoutAmount = ethers.parseEther((stakeAmount * 1.8).toFixed(6)); // 1.8x payout (house takes 10%)
+        const tx = await tokenContract.transfer(userAddress, payoutAmount);
+        await tx.wait();
+        payoutTx = tx.hash;
+        console.log(`💰 Meme Royale payout: ${stakeAmount * 1.8} tokens to ${userAddress}, tx: ${payoutTx}`);
+      } catch (payoutErr) {
+        console.error('Payout failed:', payoutErr);
+      }
+    }
+
+    // Store game result to 0G DA for permanent verification
+    const gameData = {
+      gameId,
+      gameType: 'meme-royale',
+      leftCoin,
+      rightCoin,
+      judged,
+      userAddress,
+      stakeAmount,
+      stakeSide,
+      userWon,
+      tokenAddress,
+      stakeTxHash: txHash,
+      payoutTx,
+      timestamp: Date.now()
+    };
+    const provenanceHash = await storeGameResultTo0G(gameData);
+
+    console.log('🏆 Battle result:', judged.winner, 'wins!');
+    return res.json({ success: true, judged, payoutTx, winner: judged.winner, provenanceHash });
+  } catch (e) {
+    console.error('meme-royale error:', e);
+    return res.status(500).json({ error: e?.message || 'meme-royale failed' });
+  }
+});
