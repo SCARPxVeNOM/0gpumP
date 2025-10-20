@@ -70,14 +70,49 @@ export class NewBondingCurveTradingService {
     try {
       const curve = new Contract(curveAddress, BONDING_CURVE_ABI, this.provider)
       
-      // Get all curve data
-      const [tokenAddress, ogReserve, tokenReserve, feeBps, seeded] = await Promise.all([
-        curve.token(),
-        curve.ogReserve(),
-        curve.tokenReserve(),
-        curve.feeBps(),
-        curve.seeded()
-      ])
+      console.log(`🔍 Getting curve info for: ${curveAddress}`)
+      
+      // Get all curve data with individual error handling
+      let tokenAddress = null
+      let ogReserve = 0n
+      let tokenReserve = 0n
+      let feeBps = 0
+      let seeded = false
+      
+      try {
+        tokenAddress = await curve.token()
+        console.log(`✅ Token address: ${tokenAddress}`)
+      } catch (e) {
+        console.warn(`❌ Failed to get token address:`, e.message)
+      }
+      
+      try {
+        ogReserve = await curve.ogReserve()
+        console.log(`✅ OG reserve: ${ogReserve}`)
+      } catch (e) {
+        console.warn(`❌ Failed to get OG reserve:`, e.message)
+      }
+      
+      try {
+        tokenReserve = await curve.tokenReserve()
+        console.log(`✅ Token reserve: ${tokenReserve}`)
+      } catch (e) {
+        console.warn(`❌ Failed to get token reserve:`, e.message)
+      }
+      
+      try {
+        feeBps = await curve.feeBps()
+        console.log(`✅ Fee BPS: ${feeBps}`)
+      } catch (e) {
+        console.warn(`❌ Failed to get fee BPS:`, e.message)
+      }
+      
+      try {
+        seeded = await curve.seeded()
+        console.log(`✅ Seeded: ${seeded}`)
+      } catch (e) {
+        console.warn(`❌ Failed to get seeded status:`, e.message)
+      }
 
       // Calculate current price (OG per token)
       const currentPrice = ogReserve > 0n && tokenReserve > 0n 

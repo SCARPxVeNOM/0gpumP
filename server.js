@@ -1478,10 +1478,10 @@ async function getProfileFromDatabase(walletAddress) {
       return profileData;
     }
     
-    // Fallback to old approach (profileHash)
+    // Fallback to old approach (profileHash) - FORCE RECREATE FOR NOW
     if (profileRow.profileHash) {
-      console.log(`🔄 Falling back to 0G Storage for ${walletAddress}`);
-      return await getProfileFromOGStorageHash(profileRow.profileHash);
+      console.log(`🔄 Profile has old hash format, forcing recreation for ${walletAddress}`);
+      return null; // Force creation of new profile
     }
     
     return null;
@@ -1529,6 +1529,9 @@ app.get("/profile/:walletAddress", async (req, res) => {
 
     // Try to get profile from database first (fast and reliable)
     let profile = await getProfileFromDatabase(walletAddress);
+    console.log(`🔍 getProfileFromDatabase returned:`, profile ? 'profile object' : 'null');
+    console.log(`🔍 Profile type:`, typeof profile);
+    console.log(`🔍 Profile keys:`, profile ? Object.keys(profile) : 'null');
     
     if (!profile) {
       console.log(`📭 No profile found in database for ${walletAddress}, creating new one`);
@@ -1559,11 +1562,20 @@ app.get("/profile/:walletAddress", async (req, res) => {
       
       // Save new profile to database
       await saveProfileToDatabase(walletAddress, profile);
+      console.log(`💾 New profile saved to database for ${walletAddress}`);
       
       // Optionally save to 0G Storage in background (for proof of history)
       saveProfileToOGStorageBackground(walletAddress, profile);
+    } else {
+      console.log(`✅ Profile loaded from database for ${walletAddress}`);
     }
 
+    console.log(`📤 Returning profile for ${walletAddress}:`, {
+      hasProfile: !!profile,
+      hasTokensCreated: !!(profile?.tokensCreated),
+      tokensCount: profile?.tokensCreated?.length || 0
+    });
+    
     res.json({ success: true, profile });
   } catch (error) {
     console.error("Get profile error:", error);
@@ -2110,6 +2122,59 @@ app.post('/fix-coin-image', async (req, res) => {
   } catch (e) {
     console.error('Fix coin image error:', e);
     res.status(500).json({ success: false, error: e?.message || 'Failed to fix coin image' });
+  }
+});
+
+// Add token to profile endpoint
+app.post('/profile/:walletAddress/tokens', async (req, res) => {
+  try {
+    const { walletAddress } = req.params;
+    const { tokenAddress, tokenName, tokenSymbol, curveAddress, txHash } = req.body;
+    
+    if (!walletAddress || !tokenAddress || !tokenName || !tokenSymbol) {
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+
+    console.log(`📝 Adding token to profile: ${tokenName} (${tokenSymbol}) for ${walletAddress}`);
+
+    // Get existing profile
+    const profile = await getProfileFromDatabase(walletAddress);
+    if (!profile) {
+      return res.status(404).json({ success: false, error: 'Profile not found' });
+    }
+
+    // Add token to created tokens list
+    const newToken = {
+      tokenAddress,
+      tokenName,
+      tokenSymbol,
+      curveAddress: curveAddress || null,
+      createdAt: new Date().toISOString(),
+      txHash: txHash || `local-${Date.now()}`
+    };
+
+    // Initialize tokensCreated array if it doesn't exist
+    if (!profile.tokensCreated) {
+      profile.tokensCreated = [];
+    }
+
+    // Check if token already exists
+    const existingToken = profile.tokensCreated.find(t => t.tokenAddress === tokenAddress);
+    if (!existingToken) {
+      profile.tokensCreated.push(newToken);
+      
+      // Save updated profile
+      await saveProfileToDatabase(walletAddress, profile);
+      
+      console.log(`✅ Token added to profile: ${tokenName} (${tokenSymbol})`);
+    } else {
+      console.log(`ℹ️ Token already exists in profile: ${tokenName} (${tokenSymbol})`);
+    }
+
+    res.json({ success: true, message: 'Token added to profile' });
+  } catch (e) {
+    console.error('Add token to profile error:', e);
+    res.status(500).json({ success: false, error: e?.message || 'Failed to add token to profile' });
   }
 });
 
